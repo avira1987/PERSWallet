@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}مدیریت کاربران - پنل مدیریت بات{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4"><i class="bi bi-people"></i> مدیریت کاربران</h2>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <input type="text" class="form-control" id="search-input" placeholder="جستجوی کاربر (User ID)">
+            </div>
+            <div class="col-md-4">
+                <select class="form-select" id="filter-lock">
+                    <option value="">همه کاربران</option>
+                    <option value="locked">فقط قفل شده</option>
+                    <option value="unlocked">فقط باز</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <button class="btn btn-primary w-100" onclick="loadUsers()">
+                    <i class="bi bi-arrow-clockwise"></i> بروزرسانی
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Users Table -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">لیست کاربران</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover" id="users-table">
+                <thead>
+                    <tr>
+                        <th>User ID</th>
+                        <th>تاریخ ثبت</th>
+                        <th>تعداد حساب</th>
+                        <th>موجودی</th>
+                        <th>وضعیت</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody id="users-tbody">
+                    <tr>
+                        <td colspan="6" class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">در حال بارگذاری...</span>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- User Detail Modal -->
+<div class="modal fade" id="userDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">جزئیات کاربر</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="user-detail-content">
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">در حال بارگذاری...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let allUsers = [];
+    
+    async function loadUsers() {
+        try {
+            const response = await fetch('/api/users');
+            const data = await response.json();
+            allUsers = data.users;
+            renderUsers(allUsers);
+        } catch (error) {
+            console.error('Error loading users:', error);
+            alert('خطا در بارگذاری کاربران');
+        }
+    }
+    
+    function renderUsers(users) {
+        const tbody = document.getElementById('users-tbody');
+        const searchTerm = document.getElementById('search-input').value.toLowerCase();
+        const lockFilter = document.getElementById('filter-lock').value;
+        
+        let filteredUsers = users.filter(user => {
+            const matchesSearch = !searchTerm || user.user_id.toLowerCase().includes(searchTerm);
+            const matchesLock = !lockFilter || 
+                (lockFilter === 'locked' && user.is_locked) ||
+                (lockFilter === 'unlocked' && !user.is_locked);
+            return matchesSearch && matchesLock;
+        });
+        
+        if (filteredUsers.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center">کاربری یافت نشد</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = filteredUsers.map(user => `
+            <tr>
+                <td>${user.user_id}</td>
+                <td>${user.created_at ? new Date(user.created_at).toLocaleString('fa-IR') : '-'}</td>
+                <td>${user.account_count}</td>
+                <td>${parseFloat(user.balance).toLocaleString('fa-IR')} PERS</td>
+                <td>
+                    ${user.is_locked 
+                        ? `<span class="badge bg-danger">قفل شده</span><br><small class="text-muted">${user.lock_reason || ''}</small>`
+                        : '<span class="badge bg-success">باز</span>'
+                    }
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-info" onclick="showUserDetail('${user.user_id}')">
+                        <i class="bi bi-eye"></i> جزئیات
+                    </button>
+                    ${user.is_locked 
+                        ? `<button class="btn btn-sm btn-success" onclick="unlockUser('${user.user_id}')">
+                            <i class="bi bi-unlock"></i> باز کردن
+                        </button>`
+                        : `<button class="btn btn-sm btn-warning" onclick="lockUser('${user.user_id}')">
+                            <i class="bi bi-lock"></i> قفل کردن
+                        </button>`
+                    }
+                </td>
+            </tr>
+        `).join('');
+    }
+    
+    async function showUserDetail(userId) {
+        try {
+            const response = await fetch(`/api/users/${userId}`);
+            const user = await response.json();
+            
+            const accountsHtml = user.accounts.map(acc => `
+                <div class="card mb-2">
+                    <div class="card-body">
+                        <h6>شماره حساب: ${acc.account_number}</h6>
+                        <p class="mb-1">موجودی: ${parseFloat(acc.balance).toLocaleString('fa-IR')} PERS</p>
+                        <p class="mb-1">وضعیت: ${acc.is_active ? '<span class="badge bg-success">فعال</span>' : '<span class="badge bg-secondary">غیرفعال</span>'}</p>
+                        <p class="mb-0">تعداد تراکنش: ${acc.transaction_count}</p>
+                    </div>
+                </div>
+            `).join('');
+            
+            document.getElementById('user-detail-content').innerHTML = `
+                <h6>User ID: ${user.user_id}</h6>
+                <p>تاریخ ثبت: ${user.created_at ? new Date(user.created_at).toLocaleString('fa-IR') : '-'}</p>
+                <hr>
+                <h6>حساب‌ها:</h6>
+                ${accountsHtml || '<p>هیچ حسابی وجود ندارد</p>'}
+                <hr>
+                <h6>وضعیت قفل:</h6>
+                ${user.lock 
+                    ? `<p>قفل شده - دلیل: ${user.lock.reason || 'نامشخص'}</p>`
+                    : '<p>باز</p>'
+                }
+            `;
+            
+            new bootstrap.Modal(document.getElementById('userDetailModal')).show();
+        } catch (error) {
+            console.error('Error loading user detail:', error);
+            alert('خطا در بارگذاری جزئیات کاربر');
+        }
+    }
+    
+    async function lockUser(userId) {
+        if (!confirm('آیا مطمئن هستید که می‌خواهید این کاربر را قفل کنید؟')) return;
+        
+        try {
+            const response = await fetch(`/api/users/${userId}/lock`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({reason: 'قفل دستی توسط ادمین'})
+            });
+            const data = await response.json();
+            if (data.success) {
+                alert('کاربر قفل شد');
+                loadUsers();
+            }
+        } catch (error) {
+            console.error('Error locking user:', error);
+            alert('خطا در قفل کردن کاربر');
+        }
+    }
+    
+    async function unlockUser(userId) {
+        if (!confirm('آیا مطمئن هستید که می‌خواهید این کاربر را باز کنید؟')) return;
+        
+        try {
+            const response = await fetch(`/api/users/${userId}/unlock`, {
+                method: 'POST'
+            });
+            const data = await response.json();
+            if (data.success) {
+                alert('کاربر باز شد');
+                loadUsers();
+            }
+        } catch (error) {
+            console.error('Error unlocking user:', error);
+            alert('خطا در باز کردن کاربر');
+        }
+    }
+    
+    // Event listeners
+    document.getElementById('search-input').addEventListener('input', () => renderUsers(allUsers));
+    document.getElementById('filter-lock').addEventListener('change', () => renderUsers(allUsers));
+    
+    // Load users on page load
+    loadUsers();
+    
+    // Auto-refresh every 30 seconds
+    setInterval(loadUsers, 30000);
+</script>
+{% endblock %}

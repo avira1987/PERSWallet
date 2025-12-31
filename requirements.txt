@@ -1,0 +1,13 @@
+python-telegram-bot==20.7
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.23
+bcrypt==4.1.2
+cryptography==42.0.5
+qrcode[pil]==7.4.2
+reportlab==4.1.0
+python-dotenv==1.0.1
+Pillow==10.3.0
+Flask==3.0.0
+Flask-Login==0.6.3
+Werkzeug==3.0.1
+

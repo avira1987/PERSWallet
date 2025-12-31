@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}مدیریت حساب‌ها - پنل مدیریت بات{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4"><i class="bi bi-wallet2"></i> مدیریت حساب‌ها</h2>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <input type="text" class="form-control" id="search-input" placeholder="جستجوی شماره حساب">
+            </div>
+            <div class="col-md-4">
+                <select class="form-select" id="filter-status">
+                    <option value="">همه حساب‌ها</option>
+                    <option value="active">فقط فعال</option>
+                    <option value="inactive">فقط غیرفعال</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <button class="btn btn-primary w-100" onclick="loadAccounts()">
+                    <i class="bi bi-arrow-clockwise"></i> بروزرسانی
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Accounts Table -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">لیست حساب‌ها</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover" id="accounts-table">
+                <thead>
+                    <tr>
+                        <th>شماره حساب</th>
+                        <th>User ID</th>
+                        <th>موجودی</th>
+                        <th>وضعیت</th>
+                        <th>تاریخ ایجاد</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody id="accounts-tbody">
+                    <tr>
+                        <td colspan="6" class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">در حال بارگذاری...</span>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let allAccounts = [];
+    
+    async function loadAccounts() {
+        try {
+            const response = await fetch('/api/accounts');
+            const data = await response.json();
+            allAccounts = data.accounts;
+            renderAccounts(allAccounts);
+        } catch (error) {
+            console.error('Error loading accounts:', error);
+            alert('خطا در بارگذاری حساب‌ها');
+        }
+    }
+    
+    function renderAccounts(accounts) {
+        const tbody = document.getElementById('accounts-tbody');
+        const searchTerm = document.getElementById('search-input').value.toLowerCase();
+        const statusFilter = document.getElementById('filter-status').value;
+        
+        let filteredAccounts = accounts.filter(account => {
+            const matchesSearch = !searchTerm || account.account_number.includes(searchTerm) || account.user_id.includes(searchTerm);
+            const matchesStatus = !statusFilter || 
+                (statusFilter === 'active' && account.is_active) ||
+                (statusFilter === 'inactive' && !account.is_active);
+            return matchesSearch && matchesStatus;
+        });
+        
+        if (filteredAccounts.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center">حسابی یافت نشد</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = filteredAccounts.map(account => `
+            <tr>
+                <td><code>${account.account_number}</code></td>
+                <td>${account.user_id}</td>
+                <td>${parseFloat(account.balance).toLocaleString('fa-IR')} PERS</td>
+                <td>
+                    ${account.is_active 
+                        ? '<span class="badge bg-success">فعال</span>'
+                        : '<span class="badge bg-secondary">غیرفعال</span>'
+                    }
+                </td>
+                <td>${account.created_at ? new Date(account.created_at).toLocaleString('fa-IR') : '-'}</td>
+                <td>
+                    <button class="btn btn-sm ${account.is_active ? 'btn-warning' : 'btn-success'}" 
+                            onclick="toggleAccount('${account.account_number}', ${account.is_active})">
+                        <i class="bi bi-${account.is_active ? 'x-circle' : 'check-circle'}"></i> 
+                        ${account.is_active ? 'غیرفعال کردن' : 'فعال کردن'}
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+    
+    async function toggleAccount(accountNumber, currentStatus) {
+        const action = currentStatus ? 'غیرفعال' : 'فعال';
+        if (!confirm(`آیا مطمئن هستید که می‌خواهید این حساب را ${action} کنید؟`)) return;
+        
+        try {
+            const response = await fetch(`/api/accounts/${accountNumber}/toggle`, {
+                method: 'POST'
+            });
+            const data = await response.json();
+            if (data.success) {
+                alert(data.message);
+                loadAccounts();
+            }
+        } catch (error) {
+            console.error('Error toggling account:', error);
+            alert('خطا در تغییر وضعیت حساب');
+        }
+    }
+    
+    // Event listeners
+    document.getElementById('search-input').addEventListener('input', () => renderAccounts(allAccounts));
+    document.getElementById('filter-status').addEventListener('change', () => renderAccounts(allAccounts));
+    
+    // Load accounts on page load
+    loadAccounts();
+    
+    // Auto-refresh every 30 seconds
+    setInterval(loadAccounts, 30000);
+</script>
+{% endblock %}

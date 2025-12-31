@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}داشبورد - پنل مدیریت بات{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4"><i class="bi bi-speedometer2"></i> داشبورد</h2>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card text-white bg-primary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-subtitle mb-2">کل کاربران</h6>
+                        <h3 class="card-title mb-0" id="total-users">{{ stats.total_users }}</h3>
+                    </div>
+                    <i class="bi bi-people" style="font-size: 3rem; opacity: 0.5;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card text-white bg-success">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-subtitle mb-2">حساب‌های فعال</h6>
+                        <h3 class="card-title mb-0" id="active-accounts">{{ stats.active_accounts }}</h3>
+                    </div>
+                    <i class="bi bi-wallet2" style="font-size: 3rem; opacity: 0.5;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card text-white bg-info">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-subtitle mb-2">کل تراکنش‌ها</h6>
+                        <h3 class="card-title mb-0" id="total-transactions">{{ stats.total_transactions }}</h3>
+                    </div>
+                    <i class="bi bi-arrow-left-right" style="font-size: 3rem; opacity: 0.5;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card text-white bg-warning">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-subtitle mb-2">کل موجودی</h6>
+                        <h3 class="card-title mb-0" id="total-balance">{{ "{:,.2f}".format(stats.total_balance) }} PERS</h3>
+                    </div>
+                    <i class="bi bi-cash-coin" style="font-size: 3rem; opacity: 0.5;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- More Statistics -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title"><i class="bi bi-hourglass-split"></i> تراکنش‌های در انتظار</h6>
+                <h4 class="text-warning">{{ stats.pending_transactions }}</h4>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title"><i class="bi bi-check-circle"></i> تراکنش‌های موفق</h6>
+                <h4 class="text-success">{{ stats.success_transactions }}</h4>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title"><i class="bi bi-lock"></i> کاربران قفل شده</h6>
+                <h4 class="text-danger">{{ stats.locked_users }}</h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts -->
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-pie-chart"></i> تراکنش‌ها بر اساس نوع</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="transactionTypeChart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-graph-up"></i> آمار کلی</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="statsChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Transaction Type Chart
+    const transactionTypeCtx = document.getElementById('transactionTypeChart').getContext('2d');
+    new Chart(transactionTypeCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['خرید', 'فروش', 'ارسال'],
+            datasets: [{
+                data: [{{ stats.buy_count }}, {{ stats.sell_count }}, {{ stats.send_count }}],
+                backgroundColor: ['#0d6efd', '#198754', '#ffc107']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true
+        }
+    });
+    
+    // Stats Chart
+    const statsCtx = document.getElementById('statsChart').getContext('2d');
+    new Chart(statsCtx, {
+        type: 'bar',
+        data: {
+            labels: ['کاربران', 'حساب‌ها', 'تراکنش‌ها'],
+            datasets: [{
+                label: 'تعداد',
+                data: [{{ stats.total_users }}, {{ stats.total_accounts }}, {{ stats.total_transactions }}],
+                backgroundColor: ['#0d6efd', '#198754', '#ffc107']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+    
+    // Auto-refresh stats every 30 seconds
+    setInterval(async () => {
+        try {
+            const response = await fetch('/api/stats');
+            const stats = await response.json();
+            
+            document.getElementById('total-users').textContent = stats.total_users;
+            document.getElementById('active-accounts').textContent = stats.active_accounts;
+            document.getElementById('total-transactions').textContent = stats.total_transactions;
+            document.getElementById('total-balance').textContent = parseFloat(stats.total_balance).toLocaleString('fa-IR') + ' PERS';
+        } catch (error) {
+            console.error('Error refreshing stats:', error);
+        }
+    }, 30000);
+</script>
+{% endblock %}

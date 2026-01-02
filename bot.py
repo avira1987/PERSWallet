@@ -182,49 +182,6 @@ class BalanceBot:
             elif step == 'enter_message':
                 await self.contact_handler.handle_message_input(update, context)
         else:
-            # Handle payment link start (from deep link)
-            if update.message.text and update.message.text.startswith('/start'):
-                parts = update.message.text.split()
-                if len(parts) > 1 and parts[1].startswith('pay_'):
-                    # Payment link clicked
-                    try:
-                        amount = float(parts[1].replace('pay_', ''))
-                        # Check if user has account
-                        account = self.db.get_active_account(user_id)
-                        if account:
-                            # User has account, start buy process with pre-filled amount
-                            from utils.encryption import encrypt_state
-                            state = {
-                                'action': 'buy_pers',
-                                'step': 'enter_password',
-                                'amount': amount,
-                                'from_payment_link': True
-                            }
-                            encrypted_state = encrypt_state(state)
-                            self.db.update_user_state(user_id, encrypted_state)
-                            
-                            buy_text = "🔗 لینک پرداخت\n\n"
-                            buy_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
-                            buy_text += f"💰 مبلغ: {amount:,.2f} PERS\n\n"
-                            buy_text += "برای شارژ حساب خود، لطفا رمز عبور ۸ رقمی خود را وارد کنید:\n\n"
-                            buy_text += "⚠️ توجه: برای امنیت بیشتر، رمز عبور شما نمایش داده نمی‌شود."
-                            
-                            keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
-                            reply_markup = InlineKeyboardMarkup(keyboard)
-                            await send_and_save_message(context, update.effective_chat.id, buy_text, self.db, user_id, reply_markup=reply_markup)
-                        else:
-                            # User doesn't have account
-                            error_text = "⚠️ برای استفاده از این لینک پرداخت\n\n"
-                            error_text += "شما باید ابتدا یک اکانت در ربات بسازید.\n\n"
-                            error_text += "💡 پس از ساخت اکانت، می‌توانید از لینک پرداخت استفاده کنید."
-                            keyboard = [[InlineKeyboardButton("ساخت اکانت", callback_data="create_account")]]
-                            reply_markup = InlineKeyboardMarkup(keyboard)
-                            await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)
-                    except:
-                        await self.start_handler.handle_start(update, context)
-                else:
-                    await self.start_handler.handle_start(update, context)
-            else:
                 # Unknown message, show error
                 error_text = "لطفا از دکمه‌های منو استفاده کنید."
                 

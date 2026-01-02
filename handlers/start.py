@@ -29,6 +29,11 @@ class StartHandler:
         
         # Check for payment link parameter (deep link)
         # Format: /start pay_{amount}
+        # Log for debugging
+        logger = logging.getLogger(__name__)
+        if context.args:
+            logger.info(f"Deep link args received: {context.args}")
+        
         if context.args and len(context.args) > 0 and context.args[0].startswith('pay_'):
             # This is a payment link click
             try:
@@ -58,7 +63,8 @@ class StartHandler:
                     state = {
                         'action': 'buy_pers',
                         'step': 'enter_password',
-                        'amount': amount
+                        'amount': amount,
+                        'from_payment_link': True
                     }
                     encrypted_state = encrypt_state(state)
                     self.db.update_user_state(user_id, encrypted_state)

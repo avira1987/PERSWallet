@@ -7,6 +7,7 @@ from utils.encryption import encrypt_state, decrypt_state
 from utils.message_manager import delete_previous_messages, send_and_save_message, edit_and_save_message
 import config
 import asyncio
+import logging
 from datetime import datetime, timedelta
 
 
@@ -427,7 +428,6 @@ class SendHandler:
                         admin_account = self.db.get_account_by_number(admin_account_number)
             except Exception as e:
                 # Account might already exist, try to get it again
-                import logging
                 logger = logging.getLogger(__name__)
                 logger.warning(f"Error creating admin account, trying to get it: {e}")
                 admin_account = self.db.get_account_by_number(admin_account_number)
@@ -470,6 +470,34 @@ class SendHandler:
                 abs(admin_balance_after - expected_admin) < 0.01):
                 # Transaction successful
                 self.db.update_transaction_status(transaction.id, 'success')
+                
+                # Send notification to recipient
+                try:
+                    dest_account = self.db.get_account_by_number(to_account)
+                    if dest_account:
+                        recipient_user_id = dest_account.user_id
+                        new_balance = float(self.db.get_account_balance(to_account))
+                        
+                        # Format notification message
+                        notification_text = "✅ واریز به حساب شما\n\n"
+                        notification_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+                        notification_text += f"💰 مبلغ واریزی: {amount:,.2f} PERS\n\n"
+                        notification_text += f"از حساب: {from_account}\n\n"
+                        notification_text += f"💼 موجودی جدید حساب: {new_balance:,.2f} PERS\n\n"
+                        notification_text += "━━━━━━━━━━━━━━━━━━━━"
+                        
+                        # Send message to recipient (ignore errors if user blocked bot)
+                        try:
+                            await context.bot.send_message(chat_id=int(recipient_user_id), text=notification_text)
+                        except Exception as e:
+                            # User might have blocked the bot, ignore the error
+                            logger = logging.getLogger(__name__)
+                            logger.warning(f"Could not send notification to user {recipient_user_id}: {e}")
+                except Exception as e:
+                    # Log error but don't fail the transaction
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Error sending notification to recipient: {e}")
+                
                 return True
             else:
                 # Rollback

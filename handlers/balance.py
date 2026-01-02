@@ -135,9 +135,18 @@ class BalanceHandler:
         # Delete previous messages
         await delete_previous_messages(update, context, self.db, user_id, delete_user_message=True)
         
-        # Generate payment link
+        # Get account to include in payment link
+        account = self.db.get_active_account(user_id)
+        if not account:
+            error_text = "شما هیچ اکانت فعالی ندارید."
+            keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)
+            return
+        
+        # Generate payment link with destination account
         bot_username = context.bot.username
-        payment_link = generate_payment_link(bot_username, amount)
+        payment_link = generate_payment_link(bot_username, amount, account.account_number)
         
         # Generate QR code
         qr_code = generate_qr_code(payment_link)

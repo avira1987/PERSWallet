@@ -119,7 +119,7 @@ class ContactHandler:
         message_text += "لطفا متن پیام خود را وارد کنید:\n\n"
         message_text += "💡 می‌توانید سوالات، پیشنهادات یا مشکلات خود را مطرح کنید.\n"
         message_text += "⏰ تیم پشتیبانی در اسرع وقت به شما پاسخ خواهد داد.\n\n"
-        message_text += "📞 پشتیبانی: @avxsupport"
+        message_text += "📞 پشتیبانی: @PERS_coin_bot_support"
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -171,7 +171,7 @@ class ContactHandler:
         success_text += "📨 پیام شما به تیم پشتیبانی ارسال شد.\n\n"
         success_text += "⏰ در اسرع وقت به شما پاسخ داده خواهد شد.\n\n"
         success_text += "💡 می‌توانید از طریق همین بخش پیام‌های بعدی را نیز ارسال کنید.\n\n"
-        success_text += "📞 پشتیبانی: @avxsupport"
+        success_text += "📞 پشتیبانی: @PERS_coin_bot_support"
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)

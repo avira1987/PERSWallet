@@ -44,10 +44,10 @@ def format_account_number(account_number: str) -> str:
     return f"`{account_number}`"
 
 
-def generate_payment_link(bot_username: str, amount: float) -> str:
+def generate_payment_link(bot_username: str, amount: float, destination_account: str) -> str:
     """
     Generate payment link for Telegram bot
-    Format: https://t.me/{bot_username}?start=pay_{amount}
+    Format: https://t.me/{bot_username}?start=pay_{destination_account}_{amount}
     """
-    return f"https://t.me/{bot_username}?start=pay_{amount}"
+    return f"https://t.me/{bot_username}?start=pay_{destination_account}_{amount}"
 

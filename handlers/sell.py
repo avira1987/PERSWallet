@@ -45,12 +45,14 @@ class SellHandler:
         
         # Request amount
         balance = float(account.balance)
-        max_sell = balance + (balance * config.SELL_FEE_PERCENT)
+        # User can sell up to 99% of balance, 1% must remain
+        max_sell = balance * 0.99
         
         amount_text = "💸 فروش PERS\n\n"
         amount_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
         amount_text += f"💼 موجودی فعلی: {balance:,.2f} PERS\n"
-        amount_text += f"📊 حداکثر مقدار فروش: {max_sell:,.2f} PERS\n\n"
+        amount_text += f"📊 حداکثر مقدار فروش: {max_sell:,.2f} PERS\n"
+        amount_text += f"💡 حداقل موجودی باقیمانده: {balance * 0.01:,.2f} PERS (1%)\n\n"
         amount_text += "لطفا مقدار مورد نظر را برای فروش وارد کنید (به PERS):\n\n"
         amount_text += "⚠️ توجه: پس از فروش، مبلغ به حساب بانکی شما واریز می‌شود."
         
@@ -102,7 +104,8 @@ class SellHandler:
         
         # Check max sell amount
         balance = float(account.balance)
-        max_sell = balance + (amount * config.SELL_FEE_PERCENT)
+        # User can sell up to 99% of balance, 1% must remain
+        max_sell = balance * 0.99
         
         if amount > max_sell:
             await delete_previous_messages(update, context, self.db, user_id, delete_user_message=True)
@@ -380,6 +383,20 @@ class SellHandler:
         await delete_previous_messages(update, context, self.db, user_id, delete_user_message=True)
         
         amount = state.get('amount', 0)
+        
+        # Final safety check: ensure at least 1% of balance remains
+        balance = float(account.balance)
+        max_sell = balance * 0.99
+        if amount > max_sell:
+            error_text = f"مقدار وارد شده بیش از حد مجاز است.\n\n"
+            error_text += f"حداکثر مقدار فروش: {max_sell:,.2f} PERS\n"
+            error_text += f"حداقل موجودی باقیمانده: {balance * 0.01:,.2f} PERS (1%)"
+            
+            keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)
+            return
         
         # Deduct from balance
         self.db.update_account_balance(account.account_number, -amount)

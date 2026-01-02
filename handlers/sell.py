@@ -47,9 +47,12 @@ class SellHandler:
         balance = float(account.balance)
         max_sell = balance + (balance * config.SELL_FEE_PERCENT)
         
-        amount_text = f"لطفا مقدار مورد نظر را وارد کنید (به PERS):\n\n"
-        amount_text += f"موجودی شما: {balance:,.2f} PERS\n"
-        amount_text += f"حداکثر مقدار فروش: {max_sell:,.2f} PERS"
+        amount_text = "💸 فروش PERS\n\n"
+        amount_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        amount_text += f"💼 موجودی فعلی: {balance:,.2f} PERS\n"
+        amount_text += f"📊 حداکثر مقدار فروش: {max_sell:,.2f} PERS\n\n"
+        amount_text += "لطفا مقدار مورد نظر را برای فروش وارد کنید (به PERS):\n\n"
+        amount_text += "⚠️ توجه: پس از فروش، مبلغ به حساب بانکی شما واریز می‌شود."
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -122,8 +125,10 @@ class SellHandler:
         encrypted_state = encrypt_state(state)
         self.db.update_user_state(user_id, encrypted_state)
         
-        sheba_text = "لطفا شماره شبا (IBAN) خود را وارد کنید:\n\n"
-        sheba_text += "فرمت: IR + 24 رقم"
+        sheba_text = "🏦 اطلاعات حساب بانکی\n\n"
+        sheba_text += "لطفا شماره شبا (IBAN) خود را وارد کنید:\n\n"
+        sheba_text += "📝 فرمت: IR + 24 رقم\n\n"
+        sheba_text += "مثال: IR123456789012345678901234"
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -219,7 +224,9 @@ class SellHandler:
         encrypted_state = encrypt_state(state)
         self.db.update_user_state(user_id, encrypted_state)
         
-        card_text = "لطفا شماره کارت بانکی خود را وارد کنید:"
+        card_text = "💳 شماره کارت بانکی\n\n"
+        card_text += "لطفا شماره کارت بانکی خود را وارد کنید (۱۶ رقم):\n\n"
+        card_text += "⚠️ توجه: شماره کارت باید با حساب بانکی شما مطابقت داشته باشد."
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -271,7 +278,12 @@ class SellHandler:
         amount = state.get('amount', 0)
         amount_toman = amount * config.PERS_TO_TOMAN
         
-        confirm_text = f"حداکثر ۴۸ ساعت مبلغ {amount_toman:,.0f} تومان ({amount:,.2f} PERS) برای شما واریز می‌شود.\n\n"
+        confirm_text = "✅ تایید نهایی فروش\n\n"
+        confirm_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        confirm_text += f"💰 مبلغ فروش: {amount:,.2f} PERS\n"
+        confirm_text += f"💵 معادل تومان: {amount_toman:,.0f} تومان\n\n"
+        confirm_text += "⏰ زمان واریز: حداکثر ۴۸ ساعت\n\n"
+        confirm_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
         confirm_text += "آیا تایید می‌کنید؟"
         
         keyboard = [
@@ -304,7 +316,9 @@ class SellHandler:
         encrypted_state = encrypt_state(state)
         self.db.update_user_state(user_id, encrypted_state)
         
-        password_text = "لطفا رمز عبور خود را وارد کنید:"
+        password_text = "🔐 تایید هویت\n\n"
+        password_text += "لطفا رمز عبور ۸ رقمی خود را وارد کنید:\n\n"
+        password_text += "⚠️ توجه: برای امنیت بیشتر، رمز عبور شما نمایش داده نمی‌شود."
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -397,8 +411,15 @@ class SellHandler:
             pass  # Admin might not be set up yet
         
         # Show success message
-        success_text = f"✅ ثبت شد!\n\n"
-        success_text += f"حداکثر ۴۸ ساعت مبلغ {amount_toman:,.0f} تومان ({amount:,.2f} PERS) برای شما واریز می‌شود."
+        new_balance = float(self.db.get_account_balance(account.account_number))
+        success_text = "✅ درخواست فروش با موفقیت ثبت شد!\n\n"
+        success_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        success_text += f"💰 مبلغ فروش: {amount:,.2f} PERS\n"
+        success_text += f"💵 معادل تومان: {amount_toman:,.0f} تومان\n"
+        success_text += f"💼 موجودی جدید: {new_balance:,.2f} PERS\n\n"
+        success_text += "⏰ زمان واریز: حداکثر ۴۸ ساعت\n\n"
+        success_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        success_text += "🎉 درخواست شما در حال پردازش است. پس از واریز، به شما اطلاع داده می‌شود."
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)

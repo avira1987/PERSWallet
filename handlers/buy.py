@@ -44,7 +44,12 @@ class BuyHandler:
         self.db.update_user_state(user_id, encrypted_state)
         
         # Request amount
-        amount_text = "لطفا مقدار مورد نظر خود را وارد کنید (به PERS):"
+        balance = float(account.balance)
+        amount_text = "🛒 خرید PERS\n\n"
+        amount_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        amount_text += f"💼 موجودی فعلی: {balance:,.2f} PERS\n\n"
+        amount_text += "لطفا مقدار مورد نظر خود را برای خرید وارد کنید (به PERS):\n\n"
+        amount_text += "⚠️ توجه: حداقل مبلغ خرید ۱ PERS است."
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -106,7 +111,9 @@ class BuyHandler:
         encrypted_state = encrypt_state(state)
         self.db.update_user_state(user_id, encrypted_state)
         
-        password_text = "لطفا رمز عبور خود را وارد کنید:"
+        password_text = "🔐 تایید هویت\n\n"
+        password_text += "لطفا رمز عبور ۸ رقمی خود را وارد کنید:\n\n"
+        password_text += "⚠️ توجه: برای امنیت بیشتر، رمز عبور شما نمایش داده نمی‌شود."
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -164,35 +171,47 @@ class BuyHandler:
             self.db.update_user_state(user_id, encrypted_state)
             return
         
-        # Password correct, delete previous messages and show payment link
+        # Password correct, delete previous messages
         await delete_previous_messages(update, context, self.db, user_id, delete_user_message=True)
         
         amount = state.get('amount', 0)
+        from_payment_link = state.get('from_payment_link', False)
         
-        # Show payment link (mock Shaparak)
-        payment_text = "لینک پرداخت بانکی (شاپرک):\n\n"
-        payment_text += f"https://shaparak.ir/payment/mock?amount={amount * config.PERS_TO_TOMAN}\n\n"
-        payment_text += "⚠️ توجه: لطفا فیلترشکن خود را خاموش کنید."
-        
-        keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        processing_msg = await send_and_save_message(
-            context,
-            update.effective_chat.id,
-            payment_text,
-            self.db,
-            user_id,
-            reply_markup=reply_markup
-        )
-        
-        # Simulate payment processing (in real implementation, this would be webhook)
-        # For now, we'll simulate success after a delay
-        import asyncio
-        await asyncio.sleep(3)  # Simulate processing time
-        
-        # Update balance
-        self.db.update_account_balance(account.account_number, amount)
+        if from_payment_link:
+            # Coming from payment link, directly charge account
+            # Update balance immediately
+            self.db.update_account_balance(account.account_number, amount)
+        else:
+            # Normal buy flow, show payment link (mock Shaparak)
+            payment_text = "لینک پرداخت بانکی (شاپرک):\n\n"
+            payment_text += f"https://shaparak.ir/payment/mock?amount={amount * config.PERS_TO_TOMAN}\n\n"
+            payment_text += "⚠️ توجه: لطفا فیلترشکن خود را خاموش کنید."
+            
+            keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            processing_msg = await send_and_save_message(
+                context,
+                update.effective_chat.id,
+                payment_text,
+                self.db,
+                user_id,
+                reply_markup=reply_markup
+            )
+            
+            # Simulate payment processing (in real implementation, this would be webhook)
+            # For now, we'll simulate success after a delay
+            import asyncio
+            await asyncio.sleep(3)  # Simulate processing time
+            
+            # Update balance
+            self.db.update_account_balance(account.account_number, amount)
+            
+            # Delete processing message
+            try:
+                await processing_msg.delete()
+            except:
+                pass
         
         # Create transaction record
         self.db.create_transaction(
@@ -203,15 +222,14 @@ class BuyHandler:
             transaction_type='buy'
         )
         
-        # Delete processing message
-        try:
-            await processing_msg.delete()
-        except:
-            pass
-        
         # Show success message
-        success_text = f"✅ پرداخت با موفقیت انجام شد!\n\n"
-        success_text += f"مبلغ {amount:,.2f} PERS به حساب شما اضافه شد."
+        new_balance = float(self.db.get_account_balance(account.account_number))
+        success_text = "✅ پرداخت با موفقیت انجام شد!\n\n"
+        success_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        success_text += f"💰 مبلغ اضافه شده: {amount:,.2f} PERS\n"
+        success_text += f"💼 موجودی جدید: {new_balance:,.2f} PERS\n\n"
+        success_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        success_text += "🎉 از خرید شما متشکریم!"
         
         keyboard = [
             [InlineKeyboardButton("موجودی حساب", callback_data="balance")],

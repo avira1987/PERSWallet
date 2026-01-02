@@ -44,7 +44,9 @@ class ContactHandler:
         self.db.update_user_state(user_id, encrypted_state)
         
         # Request password
-        password_text = "لطفا رمز عبور خود را وارد کنید:"
+        password_text = "📞 ارتباط با پشتیبانی\n\n"
+        password_text += "برای ارسال پیام به پشتیبانی، لطفا رمز عبور ۸ رقمی خود را وارد کنید:\n\n"
+        password_text += "⚠️ توجه: برای امنیت بیشتر، رمز عبور شما نمایش داده نمی‌شود."
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -113,7 +115,11 @@ class ContactHandler:
         encrypted_state = encrypt_state(state)
         self.db.update_user_state(user_id, encrypted_state)
         
-        message_text = "لطفا متن پیام خود را وارد کنید:"
+        message_text = "✍️ ارسال پیام به پشتیبانی\n\n"
+        message_text += "لطفا متن پیام خود را وارد کنید:\n\n"
+        message_text += "💡 می‌توانید سوالات، پیشنهادات یا مشکلات خود را مطرح کنید.\n"
+        message_text += "⏰ تیم پشتیبانی در اسرع وقت به شما پاسخ خواهد داد.\n\n"
+        message_text += "📞 پشتیبانی: @avxsupport"
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -160,8 +166,12 @@ class ContactHandler:
             pass  # Admin might not be set up yet
         
         # Show success message
-        success_text = "✅ پیام شما با موفقیت ارسال شد.\n\n"
-        success_text += "در اسرع وقت به شما پاسخ داده خواهد شد."
+        success_text = "✅ پیام شما با موفقیت ارسال شد!\n\n"
+        success_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        success_text += "📨 پیام شما به تیم پشتیبانی ارسال شد.\n\n"
+        success_text += "⏰ در اسرع وقت به شما پاسخ داده خواهد شد.\n\n"
+        success_text += "💡 می‌توانید از طریق همین بخش پیام‌های بعدی را نیز ارسال کنید.\n\n"
+        success_text += "📞 پشتیبانی: @avxsupport"
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)

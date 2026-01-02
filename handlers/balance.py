@@ -35,9 +35,14 @@ class BalanceHandler:
             return
         
         # Show balance
-        balance_text = f"موجودی حساب شما:\n\n"
-        balance_text += f"💰 {float(account.balance):,.2f} PERS\n\n"
-        balance_text += f"شماره اکانت:\n{format_account_number(account.account_number)}"
+        balance = float(account.balance)
+        balance_text = "💰 موجودی حساب شما\n\n"
+        balance_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        balance_text += f"💵 موجودی: {balance:,.2f} PERS\n\n"
+        balance_text += f"🔢 شماره اکانت:\n"
+        balance_text += f"{format_account_number(account.account_number)}\n\n"
+        balance_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        balance_text += "💡 نکته: می‌توانید با استفاده از دکمه «ساخت لینک پرداخت»، لینک پرداخت برای دریافت PERS از دیگران ایجاد کنید."
         
         keyboard = [
             [InlineKeyboardButton("ساخت لینک پرداخت", callback_data="create_payment_link")],
@@ -79,8 +84,11 @@ class BalanceHandler:
         self.db.update_user_state(user_id, encrypted_state)
         
         # Request amount
-        amount_text = "لطفا میزان مبلغ مورد نظر خود را وارد کنید (به PERS):\n\n"
-        amount_text += "این لینک برای دریافت پرداخت استفاده می‌شود."
+        amount_text = "🔗 ساخت لینک پرداخت\n\n"
+        amount_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        amount_text += "لطفا میزان مبلغ مورد نظر خود را وارد کنید (به PERS):\n\n"
+        amount_text += "💡 این لینک برای دریافت پرداخت از دیگران استفاده می‌شود.\n"
+        amount_text += "📤 می‌توانید لینک را برای دیگران ارسال کنید تا به شما PERS پرداخت کنند."
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -135,12 +143,16 @@ class BalanceHandler:
         qr_code = generate_qr_code(payment_link)
         
         # Show payment link
-        link_text = f"لینک پرداخت شما:\n\n"
-        link_text += f"{payment_link}\n\n"
-        link_text += f"مبلغ: {amount:,.2f} PERS\n\n"
-        link_text += "اگر کسی روی این لینک کلیک کند:\n"
-        link_text += "- اگر اکانت داشته باشد، وارد مرحله ارسال PERS می‌شود\n"
-        link_text += "- اگر اکانت نداشته باشد، پیامی نمایش داده می‌شود که باید اکانت بسازد"
+        link_text = "✅ لینک پرداخت شما آماده است!\n\n"
+        link_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        link_text += f"💰 مبلغ: {amount:,.2f} PERS\n\n"
+        link_text += f"🔗 لینک پرداخت:\n{payment_link}\n\n"
+        link_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        link_text += "📋 نحوه استفاده:\n"
+        link_text += "• این لینک را برای دریافت‌کننده ارسال کنید\n"
+        link_text += "• اگر دریافت‌کننده اکانت داشته باشد، وارد مرحله ارسال می‌شود\n"
+        link_text += "• اگر اکانت نداشته باشد، باید ابتدا اکانت بسازد\n\n"
+        link_text += "💡 می‌توانید از QR Code برای سهولت استفاده کنید."
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)

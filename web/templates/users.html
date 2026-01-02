@@ -43,16 +43,18 @@
                 <thead>
                     <tr>
                         <th>User ID</th>
+                        <th>Username</th>
                         <th>تاریخ ثبت</th>
                         <th>تعداد حساب</th>
                         <th>موجودی</th>
+                        <th>نوع کاربر</th>
                         <th>وضعیت</th>
                         <th>عملیات</th>
                     </tr>
                 </thead>
                 <tbody id="users-tbody">
                     <tr>
-                        <td colspan="6" class="text-center">
+                        <td colspan="8" class="text-center">
                             <div class="spinner-border text-primary" role="status">
                                 <span class="visually-hidden">در حال بارگذاری...</span>
                             </div>
@@ -82,6 +84,82 @@
         </div>
     </div>
 </div>
+
+<!-- Balance Update Modal (for users page) -->
+<div class="modal fade" id="balanceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">تغییر موجودی حساب</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">شماره حساب:</label>
+                    <input type="text" class="form-control" id="balance-account-number" readonly>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">موجودی فعلی:</label>
+                    <input type="text" class="form-control" id="balance-current" readonly>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">نوع عملیات:</label>
+                    <select class="form-select" id="balance-action">
+                        <option value="add">افزایش/کاهش موجودی</option>
+                        <option value="set">تنظیم موجودی (مقدار دقیق)</option>
+                    </select>
+                </div>
+                <div class="mb-3" id="amount-input-group">
+                    <label class="form-label">مقدار (مثبت برای افزایش، منفی برای کاهش):</label>
+                    <input type="number" class="form-control" id="balance-amount" step="0.01" placeholder="مثال: 1000 یا -500">
+                </div>
+                <div class="mb-3 d-none" id="balance-input-group">
+                    <label class="form-label">موجودی جدید:</label>
+                    <input type="number" class="form-control" id="balance-new" step="0.01" placeholder="مثال: 5000">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">انصراف</button>
+                <button type="button" class="btn btn-primary" onclick="updateBalance()">ذخیره</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reset Password Modal (for users page) -->
+<div class="modal fade" id="resetPasswordModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">بازنشانی رمز عبور</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i> 
+                    توجه: با تغییر رمز عبور، کاربر باید از رمز جدید استفاده کند.
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">شماره حساب:</label>
+                    <input type="text" class="form-control" id="password-account-number" readonly>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">رمز عبور جدید (۸ رقم عددی):</label>
+                    <input type="text" class="form-control" id="password-new" maxlength="8" pattern="[0-9]{8}" placeholder="12345678">
+                    <small class="form-text text-muted">رمز عبور باید دقیقاً ۸ رقم عددی باشد</small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">تکرار رمز عبور:</label>
+                    <input type="text" class="form-control" id="password-confirm" maxlength="8" pattern="[0-9]{8}" placeholder="12345678">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">انصراف</button>
+                <button type="button" class="btn btn-warning" onclick="resetPassword()">بازنشانی رمز</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -106,7 +184,9 @@
         const lockFilter = document.getElementById('filter-lock').value;
         
         let filteredUsers = users.filter(user => {
-            const matchesSearch = !searchTerm || user.user_id.toLowerCase().includes(searchTerm);
+            const matchesSearch = !searchTerm || 
+                user.user_id.toLowerCase().includes(searchTerm) ||
+                (user.username && user.username.toLowerCase().includes(searchTerm));
             const matchesLock = !lockFilter || 
                 (lockFilter === 'locked' && user.is_locked) ||
                 (lockFilter === 'unlocked' && !user.is_locked);
@@ -114,16 +194,23 @@
         });
         
         if (filteredUsers.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center">کاربری یافت نشد</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center">کاربری یافت نشد</td></tr>';
             return;
         }
         
         tbody.innerHTML = filteredUsers.map(user => `
             <tr>
                 <td>${user.user_id}</td>
+                <td>${user.username ? '@' + user.username : '<span class="text-muted">-</span>'}</td>
                 <td>${user.created_at ? new Date(user.created_at).toLocaleString('fa-IR') : '-'}</td>
                 <td>${user.account_count}</td>
                 <td>${parseFloat(user.balance).toLocaleString('fa-IR')} PERS</td>
+                <td>
+                    ${user.is_admin 
+                        ? '<span class="badge bg-primary"><i class="bi bi-shield-check"></i> ادمین</span>'
+                        : '<span class="badge bg-secondary">کاربر عادی</span>'
+                    }
+                </td>
                 <td>
                     ${user.is_locked 
                         ? `<span class="badge bg-danger">قفل شده</span><br><small class="text-muted">${user.lock_reason || ''}</small>`
@@ -131,17 +218,30 @@
                     }
                 </td>
                 <td>
-                    <button class="btn btn-sm btn-info" onclick="showUserDetail('${user.user_id}')">
-                        <i class="bi bi-eye"></i> جزئیات
-                    </button>
-                    ${user.is_locked 
-                        ? `<button class="btn btn-sm btn-success" onclick="unlockUser('${user.user_id}')">
-                            <i class="bi bi-unlock"></i> باز کردن
-                        </button>`
-                        : `<button class="btn btn-sm btn-warning" onclick="lockUser('${user.user_id}')">
-                            <i class="bi bi-lock"></i> قفل کردن
-                        </button>`
-                    }
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-sm btn-info" onclick="showUserDetail('${user.user_id}')" title="جزئیات">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                        ${user.is_locked 
+                            ? `<button class="btn btn-sm btn-success" onclick="unlockUser('${user.user_id}')" title="باز کردن">
+                                <i class="bi bi-unlock"></i>
+                            </button>`
+                            : `<button class="btn btn-sm btn-warning" onclick="lockUser('${user.user_id}')" title="قفل کردن">
+                                <i class="bi bi-lock"></i>
+                            </button>`
+                        }
+                        ${user.is_admin 
+                            ? `<button class="btn btn-sm btn-secondary" onclick="removeAdmin('${user.user_id}')" title="حذف دسترسی ادمین">
+                                <i class="bi bi-shield-x"></i>
+                            </button>`
+                            : `<button class="btn btn-sm btn-primary" onclick="makeAdmin('${user.user_id}')" title="تبدیل به ادمین">
+                                <i class="bi bi-shield-check"></i>
+                            </button>`
+                        }
+                        <button class="btn btn-sm btn-danger" onclick="deleteUser('${user.user_id}')" title="حذف کاربر">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
                 </td>
             </tr>
         `).join('');
@@ -155,25 +255,65 @@
             const accountsHtml = user.accounts.map(acc => `
                 <div class="card mb-2">
                     <div class="card-body">
-                        <h6>شماره حساب: ${acc.account_number}</h6>
-                        <p class="mb-1">موجودی: ${parseFloat(acc.balance).toLocaleString('fa-IR')} PERS</p>
-                        <p class="mb-1">وضعیت: ${acc.is_active ? '<span class="badge bg-success">فعال</span>' : '<span class="badge bg-secondary">غیرفعال</span>'}</p>
-                        <p class="mb-0">تعداد تراکنش: ${acc.transaction_count}</p>
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <h6>شماره حساب: <code>${acc.account_number}</code></h6>
+                                <p class="mb-1">موجودی: <strong>${parseFloat(acc.balance).toLocaleString('fa-IR')} PERS</strong></p>
+                                <p class="mb-1">وضعیت: ${acc.is_active ? '<span class="badge bg-success">فعال</span>' : '<span class="badge bg-secondary">غیرفعال</span>'}</p>
+                                <p class="mb-0">تعداد تراکنش: ${acc.transaction_count}</p>
+                            </div>
+                            <div class="btn-group-vertical" role="group">
+                                <button class="btn btn-sm btn-primary" onclick="showBalanceModalFromUser('${acc.account_number}', ${acc.balance})" title="تغییر موجودی">
+                                    <i class="bi bi-cash-coin"></i>
+                                </button>
+                                <button class="btn btn-sm btn-warning" onclick="showResetPasswordModalFromUser('${acc.account_number}')" title="بازنشانی رمز">
+                                    <i class="bi bi-key"></i>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `).join('');
             
             document.getElementById('user-detail-content').innerHTML = `
-                <h6>User ID: ${user.user_id}</h6>
-                <p>تاریخ ثبت: ${user.created_at ? new Date(user.created_at).toLocaleString('fa-IR') : '-'}</p>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <h6>User ID:</h6>
+                        <p><code>${user.user_id}</code></p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Username:</h6>
+                        <p>${user.username ? '@' + user.username : '<span class="text-muted">-</span>'}</p>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <h6>تاریخ ثبت:</h6>
+                        <p>${user.created_at ? new Date(user.created_at).toLocaleString('fa-IR') : '-'}</p>
+                    </div>
+                </div>
                 <hr>
                 <h6>حساب‌ها:</h6>
-                ${accountsHtml || '<p>هیچ حسابی وجود ندارد</p>'}
+                ${accountsHtml || '<p class="text-muted">هیچ حسابی وجود ندارد</p>'}
+                <hr>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <h6>نوع کاربر:</h6>
+                        <p>${user.is_admin 
+                            ? '<span class="badge bg-primary"><i class="bi bi-shield-check"></i> ادمین</span>'
+                            : '<span class="badge bg-secondary">کاربر عادی</span>'
+                        }</p>
+                    </div>
+                </div>
                 <hr>
                 <h6>وضعیت قفل:</h6>
                 ${user.lock 
-                    ? `<p>قفل شده - دلیل: ${user.lock.reason || 'نامشخص'}</p>`
-                    : '<p>باز</p>'
+                    ? `<div class="alert alert-danger">
+                        <i class="bi bi-lock"></i> قفل شده<br>
+                        <small>دلیل: ${user.lock.reason || 'نامشخص'}</small><br>
+                        <small>تا: ${user.lock.locked_until ? new Date(user.lock.locked_until).toLocaleString('fa-IR') : 'نامشخص'}</small>
+                    </div>`
+                    : '<div class="alert alert-success"><i class="bi bi-unlock"></i> باز</div>'
                 }
             `;
             
@@ -222,12 +362,267 @@
         }
     }
     
+    async function deleteUser(userId) {
+        if (!confirm('⚠️ هشدار: آیا مطمئن هستید که می‌خواهید این کاربر را حذف کنید؟\n\nاین عمل غیرقابل بازگشت است و تمام اطلاعات کاربر (حساب‌ها، تراکنش‌ها) حذف خواهد شد.')) return;
+        
+        if (!confirm('آیا واقعاً مطمئن هستید؟ این عمل غیرقابل بازگشت است!')) return;
+        
+        try {
+            const response = await fetch(`/api/users/${userId}/delete`, {
+                method: 'DELETE'
+            });
+            const data = await response.json();
+            if (data.success) {
+                alert('کاربر با موفقیت حذف شد');
+                loadUsers();
+            } else {
+                alert('خطا: ' + (data.error || 'عملیات ناموفق بود'));
+            }
+        } catch (error) {
+            console.error('Error deleting user:', error);
+            alert('خطا در حذف کاربر');
+        }
+    }
+    
+    async function makeAdmin(userId) {
+        if (!confirm('آیا مطمئن هستید که می‌خواهید این کاربر را به ادمین تبدیل کنید؟')) return;
+        
+        try {
+            const response = await fetch(`/api/users/${userId}/admin`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({is_admin: true})
+            });
+            const data = await response.json();
+            if (data.success) {
+                alert('کاربر به ادمین تبدیل شد');
+                loadUsers();
+            } else {
+                alert('خطا: ' + (data.error || 'عملیات ناموفق بود'));
+            }
+        } catch (error) {
+            console.error('Error making admin:', error);
+            alert('خطا در تبدیل کاربر به ادمین');
+        }
+    }
+    
+    async function removeAdmin(userId) {
+        if (!confirm('آیا مطمئن هستید که می‌خواهید دسترسی ادمین این کاربر را حذف کنید؟')) return;
+        
+        try {
+            const response = await fetch(`/api/users/${userId}/admin`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({is_admin: false})
+            });
+            const data = await response.json();
+            if (data.success) {
+                alert('دسترسی ادمین کاربر حذف شد');
+                loadUsers();
+            } else {
+                alert('خطا: ' + (data.error || 'عملیات ناموفق بود'));
+            }
+        } catch (error) {
+            console.error('Error removing admin:', error);
+            alert('خطا در حذف دسترسی ادمین');
+        }
+    }
+    
     // Event listeners
     document.getElementById('search-input').addEventListener('input', () => renderUsers(allUsers));
     document.getElementById('filter-lock').addEventListener('change', () => renderUsers(allUsers));
     
     // Load users on page load
     loadUsers();
+    
+    function showBalanceModalFromUser(accountNumber, currentBalance) {
+        // Close user detail modal first
+        const userModal = bootstrap.Modal.getInstance(document.getElementById('userDetailModal'));
+        if (userModal) {
+            userModal.hide();
+        }
+        
+        // Show balance modal
+        setTimeout(() => {
+            showBalanceModal(accountNumber, currentBalance);
+        }, 300);
+    }
+    
+    function showResetPasswordModalFromUser(accountNumber) {
+        // Close user detail modal first
+        const userModal = bootstrap.Modal.getInstance(document.getElementById('userDetailModal'));
+        if (userModal) {
+            userModal.hide();
+        }
+        
+        // Show password reset modal
+        setTimeout(() => {
+            showResetPasswordModal(accountNumber);
+        }, 300);
+    }
+    
+    function showBalanceModal(accountNumber, currentBalance) {
+        document.getElementById('balance-account-number').value = accountNumber;
+        document.getElementById('balance-current').value = parseFloat(currentBalance).toLocaleString('fa-IR') + ' PERS';
+        document.getElementById('balance-amount').value = '';
+        document.getElementById('balance-new').value = '';
+        document.getElementById('balance-action').value = 'add';
+        updateBalanceInputVisibility();
+        new bootstrap.Modal(document.getElementById('balanceModal')).show();
+    }
+    
+    function updateBalanceInputVisibility() {
+        const action = document.getElementById('balance-action').value;
+        if (action === 'set') {
+            document.getElementById('amount-input-group').classList.add('d-none');
+            document.getElementById('balance-input-group').classList.remove('d-none');
+        } else {
+            document.getElementById('amount-input-group').classList.remove('d-none');
+            document.getElementById('balance-input-group').classList.add('d-none');
+        }
+    }
+    
+    if (document.getElementById('balance-action')) {
+        document.getElementById('balance-action').addEventListener('change', updateBalanceInputVisibility);
+    }
+    
+    async function updateBalance() {
+        const accountNumber = document.getElementById('balance-account-number').value;
+        const action = document.getElementById('balance-action').value;
+        
+        let data = {};
+        if (action === 'set') {
+            const balance = parseFloat(document.getElementById('balance-new').value);
+            if (isNaN(balance) || balance < 0) {
+                alert('لطفا موجودی معتبر وارد کنید');
+                return;
+            }
+            data = {action: 'set', balance: balance};
+        } else {
+            const amount = parseFloat(document.getElementById('balance-amount').value);
+            if (isNaN(amount)) {
+                alert('لطفا مقدار معتبر وارد کنید');
+                return;
+            }
+            data = {action: 'add', amount: amount};
+        }
+        
+        try {
+            const response = await fetch(`/api/accounts/${accountNumber}/balance`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const result = await response.json();
+            if (result.success) {
+                alert(result.message);
+                bootstrap.Modal.getInstance(document.getElementById('balanceModal')).hide();
+                loadUsers();
+                // Reload user detail if modal is open
+                const userDetailModal = bootstrap.Modal.getInstance(document.getElementById('userDetailModal'));
+                if (userDetailModal && userDetailModal._isShown) {
+                    // Get current user_id from modal content if possible
+                    const userId = document.querySelector('#user-detail-content h6 code')?.textContent;
+                    if (userId) {
+                        showUserDetail(userId);
+                    }
+                }
+            } else {
+                alert('خطا: ' + (result.error || 'عملیات ناموفق بود'));
+            }
+        } catch (error) {
+            console.error('Error updating balance:', error);
+            alert('خطا در تغییر موجودی');
+        }
+    }
+    
+    function showResetPasswordModal(accountNumber) {
+        document.getElementById('password-account-number').value = accountNumber;
+        document.getElementById('password-new').value = '';
+        document.getElementById('password-confirm').value = '';
+        new bootstrap.Modal(document.getElementById('resetPasswordModal')).show();
+    }
+    
+    async function resetPassword() {
+        const accountNumber = document.getElementById('password-account-number').value;
+        const newPassword = document.getElementById('password-new').value;
+        const confirmPassword = document.getElementById('password-confirm').value;
+        
+        if (!newPassword || newPassword.length !== 8 || !/^\d+$/.test(newPassword)) {
+            alert('رمز عبور باید دقیقاً ۸ رقم عددی باشد');
+            return;
+        }
+        
+        if (newPassword !== confirmPassword) {
+            alert('رمز عبور و تکرار آن مطابقت ندارند');
+            return;
+        }
+        
+        if (!confirm('آیا مطمئن هستید که می‌خواهید رمز عبور این حساب را تغییر دهید؟')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/accounts/${accountNumber}/reset-password`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({password: newPassword})
+            });
+            const result = await response.json();
+            if (result.success) {
+                alert(result.message);
+                bootstrap.Modal.getInstance(document.getElementById('resetPasswordModal')).hide();
+            } else {
+                alert('خطا: ' + (result.error || 'عملیات ناموفق بود'));
+            }
+        } catch (error) {
+            console.error('Error resetting password:', error);
+            alert('خطا در بازنشانی رمز عبور');
+        }
+    }
+    
+    async function updateBalanceDirect(accountNumber, amount) {
+        try {
+            const response = await fetch(`/api/accounts/${accountNumber}/balance`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({action: 'add', amount: amount})
+            });
+            const result = await response.json();
+            if (result.success) {
+                alert(result.message);
+                loadUsers();
+            } else {
+                alert('خطا: ' + (result.error || 'عملیات ناموفق بود'));
+            }
+        } catch (error) {
+            console.error('Error updating balance:', error);
+            alert('خطا در تغییر موجودی');
+        }
+    }
+    
+    async function resetPasswordDirect(accountNumber, password) {
+        if (!confirm('آیا مطمئن هستید که می‌خواهید رمز عبور این حساب را تغییر دهید؟')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/accounts/${accountNumber}/reset-password`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({password: password})
+            });
+            const result = await response.json();
+            if (result.success) {
+                alert(result.message);
+            } else {
+                alert('خطا: ' + (result.error || 'عملیات ناموفق بود'));
+            }
+        } catch (error) {
+            console.error('Error resetting password:', error);
+            alert('خطا در بازنشانی رمز عبور');
+        }
+    }
     
     // Auto-refresh every 30 seconds
     setInterval(loadUsers, 30000);

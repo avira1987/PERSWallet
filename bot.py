@@ -57,20 +57,33 @@ class BalanceBot:
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle callback queries"""
         query = update.callback_query
-        await query.answer()
         
         user_id = str(update.effective_user.id)
         
         # Check if user is locked
         is_locked, lock_message = self.lock_manager.check_lock(user_id)
         if is_locked:
+            await query.answer()
             await edit_and_save_message(update, context, lock_message, self.db, user_id)
             return
         
         callback_data = query.data
         
-        # Route to appropriate handler
-        if callback_data == "main_menu":
+        # Check agreement acceptance (except for agreement-related callbacks)
+        if callback_data not in ["accept_agreement", "decline_agreement"]:
+            if not self.db.has_accepted_agreement(user_id):
+                await query.answer()
+                await self.start_handler.show_agreement(update, context)
+                return
+        
+        # Route to appropriate handler (handlers will answer the callback query)
+        if callback_data == "accept_agreement":
+            await query.answer("موافقت‌نامه پذیرفته شد")
+            await self.start_handler.handle_accept_agreement(update, context)
+        elif callback_data == "decline_agreement":
+            await query.answer("موافقت‌نامه رد شد")
+            await self.start_handler.handle_decline_agreement(update, context)
+        elif callback_data == "main_menu":
             await self.start_handler.show_main_menu(update, context)
         elif callback_data == "create_account":
             await self.account_handler.start_create_account(update, context)
@@ -105,6 +118,15 @@ class BalanceBot:
         is_locked, lock_message = self.lock_manager.check_lock(user_id)
         if is_locked:
             await update.message.reply_text(lock_message)
+            return
+        
+        # Check agreement acceptance
+        if not self.db.has_accepted_agreement(user_id):
+            # Handle /start command even without agreement
+            if update.message.text and update.message.text.startswith('/start'):
+                await self.start_handler.handle_start(update, context)
+            else:
+                await self.start_handler.show_agreement(update, context)
             return
         
         # Get user state
@@ -170,27 +192,31 @@ class BalanceBot:
                         # Check if user has account
                         account = self.db.get_active_account(user_id)
                         if account:
-                            # User has account, start send process with pre-filled amount
+                            # User has account, start buy process with pre-filled amount
                             from utils.encryption import encrypt_state
                             state = {
-                                'action': 'send_pers',
-                                'step': 'enter_destination',
-                                'payment_link_amount': amount,
-                                'destination_attempts': 0
+                                'action': 'buy_pers',
+                                'step': 'enter_password',
+                                'amount': amount,
+                                'from_payment_link': True
                             }
                             encrypted_state = encrypt_state(state)
                             self.db.update_user_state(user_id, encrypted_state)
                             
-                            dest_text = f"لینک پرداخت برای مبلغ {amount:,.2f} PERS\n\n"
-                            dest_text += "لطفا آدرس اکانت مقصد را وارد کنید (۱۶ رقم):\n\n"
-                            dest_text += "⚠️ توجه: لطفا شماره حساب را با دقت وارد کنید تا دارایی شما از بین نرود."
+                            buy_text = "🔗 لینک پرداخت\n\n"
+                            buy_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+                            buy_text += f"💰 مبلغ: {amount:,.2f} PERS\n\n"
+                            buy_text += "برای شارژ حساب خود، لطفا رمز عبور ۸ رقمی خود را وارد کنید:\n\n"
+                            buy_text += "⚠️ توجه: برای امنیت بیشتر، رمز عبور شما نمایش داده نمی‌شود."
                             
                             keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
                             reply_markup = InlineKeyboardMarkup(keyboard)
-                            await send_and_save_message(context, update.effective_chat.id, dest_text, self.db, user_id, reply_markup=reply_markup)
+                            await send_and_save_message(context, update.effective_chat.id, buy_text, self.db, user_id, reply_markup=reply_markup)
                         else:
                             # User doesn't have account
-                            error_text = "برای استفاده از این لینک پرداخت، باید ابتدا اکانت بسازید."
+                            error_text = "⚠️ برای استفاده از این لینک پرداخت\n\n"
+                            error_text += "شما باید ابتدا یک اکانت در ربات بسازید.\n\n"
+                            error_text += "💡 پس از ساخت اکانت، می‌توانید از لینک پرداخت استفاده کنید."
                             keyboard = [[InlineKeyboardButton("ساخت اکانت", callback_data="create_account")]]
                             reply_markup = InlineKeyboardMarkup(keyboard)
                             await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)

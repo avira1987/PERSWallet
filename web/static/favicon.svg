@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0d6efd;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0056b3;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="48" fill="url(#grad)"/>
+  <!-- Robot head -->
+  <rect x="25" y="25" width="50" height="40" rx="5" fill="#ffffff" opacity="0.95"/>
+  <!-- Robot eyes -->
+  <circle cx="37" cy="40" r="5" fill="#0d6efd"/>
+  <circle cx="63" cy="40" r="5" fill="#0d6efd"/>
+  <!-- Robot mouth (balance indicator) -->
+  <rect x="42" y="52" width="16" height="3" rx="1.5" fill="#0d6efd"/>
+  <!-- Balance scale lines -->
+  <line x1="50" y1="65" x2="50" y2="75" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="35" cy="78" r="6" fill="#ffffff" opacity="0.9"/>
+  <circle cx="65" cy="78" r="6" fill="#ffffff" opacity="0.9"/>
+  <line x1="35" y1="78" x2="50" y2="75" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="65" y1="78" x2="50" y2="75" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,352 @@
+{% extends "base.html" %}
+
+{% block title %}آموزش استفاده از بات تلگرامی - پنل مدیریت بات{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4"><i class="bi bi-book"></i> آموزش استفاده از بات تلگرامی</h2>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-10 offset-lg-1">
+        <!-- Introduction -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> مقدمه</h5>
+            </div>
+            <div class="card-body">
+                <p class="lead">
+                    بات پرس بات یک ربات تلگرامی برای مدیریت دارایی دیجیتال PERS است که به شما امکان خرید، فروش، ارسال و دریافت PERS را می‌دهد.
+                </p>
+                <p>
+                    در این راهنما، تمامی مراحل استفاده از بات به صورت کامل و گام به گام توضیح داده شده است.
+                </p>
+            </div>
+        </div>
+
+        <!-- Starting the bot -->
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-play-circle"></i> شروع کار با بات</h5>
+            </div>
+            <div class="card-body">
+                <h6 class="fw-bold mb-3">مرحله ۱: شروع بات</h6>
+                <ol class="mb-3">
+                    <li>در تلگرام به بات مراجعه کنید</li>
+                    <li>دستور <code>/start</code> را ارسال کنید</li>
+                    <li>در ابتدا باید موافقت‌نامه استفاده از ربات را مطالعه و قبول کنید</li>
+                </ol>
+                
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> <strong>نکته:</strong> اگر موافقت‌نامه را رد کنید، نمی‌توانید از بات استفاده کنید.
+                </div>
+            </div>
+        </div>
+
+        <!-- Account Creation -->
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="bi bi-person-plus"></i> ساخت اکانت</h5>
+            </div>
+            <div class="card-body">
+                <h6 class="fw-bold mb-3">مرحله ۲: ساخت یا بازیابی اکانت</h6>
+                
+                <div class="mb-4">
+                    <h6 class="fw-bold text-primary">گزینه اول: ساخت اکانت جدید</h6>
+                    <ol>
+                        <li>بعد از قبول موافقت‌نامه، گزینه <strong>"ساخت اکانت جدید"</strong> را انتخاب کنید</li>
+                        <li>بات برای شما یک شماره حساب ۱۰ رقمی ایجاد می‌کند</li>
+                        <li>باید یک رمز عبور ۸ رقمی انتخاب کنید (فقط اعداد)</li>
+                        <li>رمز عبور را مجدداً تأیید کنید</li>
+                        <li>اطلاعات حساب خود را با دقت حفظ کنید!</li>
+                    </ol>
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i> <strong>هشدار:</strong> شماره حساب و رمز عبور خود را در جای امن نگه دارید. در صورت فراموشی، نمی‌توانید به حساب خود دسترسی پیدا کنید.
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <h6 class="fw-bold text-primary">گزینه دوم: بازیابی اکانت قبلی</h6>
+                    <ol>
+                        <li>اگر قبلاً اکانت ساخته‌اید، گزینه <strong>"بازیابی اکانت قبلی"</strong> را انتخاب کنید</li>
+                        <li>شماره حساب ۱۰ رقمی خود را وارد کنید</li>
+                        <li>رمز عبور ۸ رقمی خود را وارد کنید</li>
+                        <li>اگر اطلاعات درست باشد، اکانت شما بازیابی می‌شود</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Menu Features -->
+        <div class="card mb-4">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0"><i class="bi bi-list-check"></i> منوی اصلی و امکانات</h5>
+            </div>
+            <div class="card-body">
+                <p class="mb-4">پس از ورود به حساب، منوی اصلی با گزینه‌های زیر نمایش داده می‌شود:</p>
+
+                <!-- Balance -->
+                <div class="mb-4 border-start border-primary border-3 ps-3">
+                    <h6 class="fw-bold text-primary"><i class="bi bi-wallet2"></i> موجودی حساب</h6>
+                    <p>با انتخاب این گزینه می‌توانید:</p>
+                    <ul>
+                        <li>موجودی فعلی خود را مشاهده کنید</li>
+                        <li>شماره حساب خود را ببینید</li>
+                        <li>یک لینک پرداخت با QR Code ایجاد کنید</li>
+                        <li>مبلغ مورد نظر برای دریافت را تعیین کنید</li>
+                    </ul>
+                    <div class="alert alert-secondary">
+                        <strong>نحوه استفاده از لینک پرداخت:</strong><br>
+                        ۱. گزینه "ساخت لینک پرداخت" را انتخاب کنید<br>
+                        ۲. مبلغ مورد نظر را وارد کنید<br>
+                        ۳. لینک پرداخت و QR Code برای شما ساخته می‌شود<br>
+                        ۴. می‌توانید این لینک را با دیگران به اشتراک بگذارید
+                    </div>
+                </div>
+
+                <!-- Buy -->
+                <div class="mb-4 border-start border-success border-3 ps-3">
+                    <h6 class="fw-bold text-success"><i class="bi bi-cart-plus"></i> خرید پرس</h6>
+                    <p>برای خرید PERS:</p>
+                    <ol>
+                        <li>گزینه "خرید پرس" را انتخاب کنید</li>
+                        <li>مبلغ مورد نظر برای خرید (به تومان) را وارد کنید</li>
+                        <li>بات مقدار معادل PERS را محاسبه و نمایش می‌دهد</li>
+                        <li>اطلاعات حساب بانکی برای واریز نمایش داده می‌شود</li>
+                        <li>بعد از واریز، رسید پرداخت را ارسال کنید</li>
+                        <li>پس از تأیید پرداخت، PERS به حساب شما واریز می‌شود</li>
+                    </ol>
+                </div>
+
+                <!-- Send -->
+                <div class="mb-4 border-start border-info border-3 ps-3">
+                    <h6 class="fw-bold text-info"><i class="bi bi-send"></i> ارسال پرس</h6>
+                    <p>برای ارسال PERS به کاربر دیگر:</p>
+                    <ol>
+                        <li>گزینه "ارسال پرس" را انتخاب کنید</li>
+                        <li>شماره حساب گیرنده (۱۰ رقم) را وارد کنید</li>
+                        <li>مقدار PERS مورد نظر برای ارسال را وارد کنید</li>
+                        <li>رمز عبور حساب خود را برای تأیید وارد کنید</li>
+                        <li>بعد از تأیید، PERS به حساب گیرنده واریز می‌شود</li>
+                    </ol>
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> <strong>نکته:</strong> برای ارسال PERS، باید موجودی کافی داشته باشید.
+                    </div>
+                </div>
+
+                <!-- Sell -->
+                <div class="mb-4 border-start border-danger border-3 ps-3">
+                    <h6 class="fw-bold text-danger"><i class="bi bi-cash-coin"></i> فروش پرس</h6>
+                    <p>برای فروش PERS و دریافت تومان:</p>
+                    <ol>
+                        <li>گزینه "فروش پرس" را انتخاب کنید</li>
+                        <li>مقدار PERS مورد نظر برای فروش را وارد کنید</li>
+                        <li>بات مبلغ معادل تومان را محاسبه می‌کند</li>
+                        <li>اطلاعات حساب بانکی خود را وارد کنید</li>
+                        <li>رمز عبور حساب را برای تأیید وارد کنید</li>
+                        <li>بعد از تأیید، درخواست شما ثبت می‌شود</li>
+                        <li>پس از بررسی، مبلغ به حساب بانکی شما واریز می‌شود</li>
+                    </ol>
+                </div>
+
+                <!-- Transactions -->
+                <div class="mb-4 border-start border-secondary border-3 ps-3">
+                    <h6 class="fw-bold text-secondary"><i class="bi bi-clock-history"></i> ۱۰ گردش آخر</h6>
+                    <p>برای مشاهده تاریخچه تراکنش‌ها:</p>
+                    <ul>
+                        <li>گزینه "۱۰ گردش آخر" را انتخاب کنید</li>
+                        <li>لیست آخرین ۱۰ تراکنش شما نمایش داده می‌شود</li>
+                        <li>می‌توانید جزئیات هر تراکنش را مشاهده کنید</li>
+                        <li>گزارش PDF از تراکنش‌ها قابل دانلود است</li>
+                    </ul>
+                </div>
+
+                <!-- Contact -->
+                <div class="mb-4 border-start border-warning border-3 ps-3">
+                    <h6 class="fw-bold text-warning"><i class="bi bi-telephone"></i> ارتباط با ما</h6>
+                    <p>برای ارتباط با پشتیبانی:</p>
+                    <ul>
+                        <li>گزینه "ارتباط با ما" را انتخاب کنید</li>
+                        <li>پیام خود را بنویسید و ارسال کنید</li>
+                        <li>تیم پشتیبانی در اسرع وقت پاسخ شما را می‌دهند</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tips and Best Practices -->
+        <div class="card mb-4">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0"><i class="bi bi-lightbulb"></i> نکات مهم و بهترین روش‌ها</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-success"><i class="bi bi-check-circle"></i> نکات امنیتی</h6>
+                        <ul>
+                            <li>رمز عبور خود را با کسی به اشتراک نگذارید</li>
+                            <li>شماره حساب و رمز عبور را در جای امن نگه دارید</li>
+                            <li>از رمز عبور قوی و غیرقابل حدس استفاده کنید</li>
+                            <li>اطلاعات حساب خود را فقط از طریق بات بررسی کنید</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-info"><i class="bi bi-info-circle"></i> توصیه‌ها</h6>
+                        <ul>
+                            <li>قبل از انجام تراکنش، موجودی خود را بررسی کنید</li>
+                            <li>شماره حساب گیرنده را با دقت وارد کنید</li>
+                            <li>در صورت بروز مشکل، از طریق "ارتباط با ما" تماس بگیرید</li>
+                            <li>گزارش تراکنش‌ها را به صورت منظم دانلود و نگه دارید</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="alert alert-danger mt-3">
+                    <h6 class="alert-heading"><i class="bi bi-exclamation-triangle"></i> هشدارهای مهم</h6>
+                    <ul class="mb-0">
+                        <li>هیچ‌گاه اطلاعات حساب خود را به کسی ندهید</li>
+                        <li>بات هرگز از شما رمز عبور را نمی‌خواهد مگر برای تأیید تراکنش</li>
+                        <li>از لینک‌های مشکوک استفاده نکنید</li>
+                        <li>در صورت قفل شدن حساب، با پشتیبانی تماس بگیرید</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- FAQ -->
+        <div class="card mb-4">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0"><i class="bi bi-question-circle"></i> سوالات متداول (FAQ)</h5>
+            </div>
+            <div class="card-body">
+                <div class="accordion" id="faqAccordion">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">
+                                رمز عبور خود را فراموش کرده‌ام، چه کنم؟
+                            </button>
+                        </h2>
+                        <div id="faq1" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                متأسفانه در صورت فراموشی رمز عبور، امکان بازیابی وجود ندارد. به همین دلیل مهم است که اطلاعات حساب خود را در جای امن نگه دارید.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">
+                                چگونه می‌توانم موجودی خود را افزایش دهم؟
+                            </button>
+                        </h2>
+                        <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                شما می‌توانید از طریق گزینه "خرید پرس" موجودی خود را افزایش دهید. همچنین می‌توانید یک لینک پرداخت ایجاد کنید و از دیگران دریافت کنید.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">
+                                آیا هزینه تراکنش وجود دارد؟
+                            </button>
+                        </h2>
+                        <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                بله، برای برخی تراکنش‌ها مانند ارسال PERS، ممکن است کارمزد در نظر گرفته شود. قبل از تأیید تراکنش، مبلغ نهایی و کارمزد نمایش داده می‌شود.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq4">
+                                چرا حساب من قفل شده است؟
+                            </button>
+                        </h2>
+                        <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                حساب ممکن است به دلایل مختلفی مانند ورود رمز اشتباه مکرر یا سوء استفاده قفل شود. در این صورت، پیام توضیحی نمایش داده می‌شود. برای رفع مشکل با پشتیبانی تماس بگیرید.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq5">
+                                آیا می‌توانم چند حساب داشته باشم؟
+                            </button>
+                        </h2>
+                        <div id="faq5" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                بله، می‌توانید چندین حساب ایجاد کنید. اما فقط یکی از حساب‌ها به عنوان حساب فعال در نظر گرفته می‌شود که تراکنش‌ها از آن انجام می‌شود.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Commands Summary -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-keyboard"></i> خلاصه دستورات</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>دستور/گزینه</th>
+                                <th>توضیحات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>/start</code></td>
+                                <td>شروع بات و نمایش منوی اصلی</td>
+                            </tr>
+                            <tr>
+                                <td>موجودی حساب</td>
+                                <td>مشاهده موجودی و ساخت لینک پرداخت</td>
+                            </tr>
+                            <tr>
+                                <td>خرید پرس</td>
+                                <td>خرید PERS با پرداخت تومان</td>
+                            </tr>
+                            <tr>
+                                <td>ارسال پرس</td>
+                                <td>ارسال PERS به کاربر دیگر</td>
+                            </tr>
+                            <tr>
+                                <td>فروش پرس</td>
+                                <td>فروش PERS و دریافت تومان</td>
+                            </tr>
+                            <tr>
+                                <td>۱۰ گردش آخر</td>
+                                <td>مشاهده آخرین تراکنش‌ها</td>
+                            </tr>
+                            <tr>
+                                <td>ارتباط با ما</td>
+                                <td>ارسال پیام به پشتیبانی</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Support -->
+        <div class="card mb-4 border-success">
+            <div class="card-body text-center">
+                <h5 class="card-title"><i class="bi bi-headset"></i> نیاز به کمک بیشتر دارید؟</h5>
+                <p class="card-text">اگر سوال یا مشکلی دارید، می‌توانید از طریق بات و گزینه "ارتباط با ما" با تیم پشتیبانی تماس بگیرید.</p>
+                <p class="text-muted small mb-0">تیم پشتیبانی آماده پاسخگویی به شماست.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -10,7 +10,10 @@ class User(Base):
     __tablename__ = 'users'
     
     user_id = Column(String(50), primary_key=True)
+    username = Column(String(255), nullable=True)
     encrypted_state = Column(Text, nullable=True)
+    agreement_accepted = Column(Boolean, default=False)
+    is_admin = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -24,6 +27,7 @@ class Account(Base):
     account_number = Column(String(16), primary_key=True)
     user_id = Column(String(50), ForeignKey('users.user_id'), nullable=False)
     password_hash = Column(String(255), nullable=False)
+    account_number_hash = Column(String(255), nullable=True)
     balance = Column(Numeric(20, 2), default=0.00)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)

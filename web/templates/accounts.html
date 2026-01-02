@@ -44,6 +44,7 @@
                     <tr>
                         <th>شماره حساب</th>
                         <th>User ID</th>
+                        <th>Username</th>
                         <th>موجودی</th>
                         <th>وضعیت</th>
                         <th>تاریخ ایجاد</th>
@@ -52,7 +53,7 @@
                 </thead>
                 <tbody id="accounts-tbody">
                     <tr>
-                        <td colspan="6" class="text-center">
+                        <td colspan="7" class="text-center">
                             <div class="spinner-border text-primary" role="status">
                                 <span class="visually-hidden">در حال بارگذاری...</span>
                             </div>
@@ -60,6 +61,82 @@
                     </tr>
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<!-- Balance Update Modal -->
+<div class="modal fade" id="balanceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">تغییر موجودی حساب</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">شماره حساب:</label>
+                    <input type="text" class="form-control" id="balance-account-number" readonly>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">موجودی فعلی:</label>
+                    <input type="text" class="form-control" id="balance-current" readonly>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">نوع عملیات:</label>
+                    <select class="form-select" id="balance-action">
+                        <option value="add">افزایش/کاهش موجودی</option>
+                        <option value="set">تنظیم موجودی (مقدار دقیق)</option>
+                    </select>
+                </div>
+                <div class="mb-3" id="amount-input-group">
+                    <label class="form-label">مقدار (مثبت برای افزایش، منفی برای کاهش):</label>
+                    <input type="number" class="form-control" id="balance-amount" step="0.01" placeholder="مثال: 1000 یا -500">
+                </div>
+                <div class="mb-3 d-none" id="balance-input-group">
+                    <label class="form-label">موجودی جدید:</label>
+                    <input type="number" class="form-control" id="balance-new" step="0.01" placeholder="مثال: 5000">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">انصراف</button>
+                <button type="button" class="btn btn-primary" onclick="updateBalance()">ذخیره</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div class="modal fade" id="resetPasswordModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">بازنشانی رمز عبور</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i> 
+                    توجه: با تغییر رمز عبور، کاربر باید از رمز جدید استفاده کند.
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">شماره حساب:</label>
+                    <input type="text" class="form-control" id="password-account-number" readonly>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">رمز عبور جدید (۸ رقم عددی):</label>
+                    <input type="text" class="form-control" id="password-new" maxlength="8" pattern="[0-9]{8}" placeholder="12345678">
+                    <small class="form-text text-muted">رمز عبور باید دقیقاً ۸ رقم عددی باشد</small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">تکرار رمز عبور:</label>
+                    <input type="text" class="form-control" id="password-confirm" maxlength="8" pattern="[0-9]{8}" placeholder="12345678">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">انصراف</button>
+                <button type="button" class="btn btn-warning" onclick="resetPassword()">بازنشانی رمز</button>
+            </div>
         </div>
     </div>
 </div>
@@ -72,12 +149,23 @@
     async function loadAccounts() {
         try {
             const response = await fetch('/api/accounts');
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({error: 'خطای نامشخص'}));
+                throw new Error(errorData.error || `خطا: ${response.status}`);
+            }
             const data = await response.json();
-            allAccounts = data.accounts;
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            allAccounts = data.accounts || [];
             renderAccounts(allAccounts);
         } catch (error) {
             console.error('Error loading accounts:', error);
-            alert('خطا در بارگذاری حساب‌ها');
+            const tbody = document.getElementById('accounts-tbody');
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">
+                <i class="bi bi-exclamation-triangle"></i> خطا در بارگذاری حساب‌ها: ${error.message}
+                <br><button class="btn btn-sm btn-primary mt-2" onclick="loadAccounts()">تلاش مجدد</button>
+            </td></tr>`;
         }
     }
     
@@ -87,7 +175,10 @@
         const statusFilter = document.getElementById('filter-status').value;
         
         let filteredAccounts = accounts.filter(account => {
-            const matchesSearch = !searchTerm || account.account_number.includes(searchTerm) || account.user_id.includes(searchTerm);
+            const matchesSearch = !searchTerm || 
+                account.account_number.includes(searchTerm) || 
+                account.user_id.includes(searchTerm) ||
+                (account.username && account.username.toLowerCase().includes(searchTerm));
             const matchesStatus = !statusFilter || 
                 (statusFilter === 'active' && account.is_active) ||
                 (statusFilter === 'inactive' && !account.is_active);
@@ -112,11 +203,23 @@
                 </td>
                 <td>${account.created_at ? new Date(account.created_at).toLocaleString('fa-IR') : '-'}</td>
                 <td>
-                    <button class="btn btn-sm ${account.is_active ? 'btn-warning' : 'btn-success'}" 
-                            onclick="toggleAccount('${account.account_number}', ${account.is_active})">
-                        <i class="bi bi-${account.is_active ? 'x-circle' : 'check-circle'}"></i> 
-                        ${account.is_active ? 'غیرفعال کردن' : 'فعال کردن'}
-                    </button>
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-sm btn-primary" 
+                                onclick="showBalanceModal('${account.account_number}', ${account.balance})"
+                                title="تغییر موجودی">
+                            <i class="bi bi-cash-coin"></i> موجودی
+                        </button>
+                        <button class="btn btn-sm btn-warning" 
+                                onclick="showResetPasswordModal('${account.account_number}')"
+                                title="بازنشانی رمز">
+                            <i class="bi bi-key"></i> رمز
+                        </button>
+                        <button class="btn btn-sm ${account.is_active ? 'btn-danger' : 'btn-success'}" 
+                                onclick="toggleAccount('${account.account_number}', ${account.is_active})"
+                                title="${account.is_active ? 'غیرفعال' : 'فعال'}">
+                            <i class="bi bi-${account.is_active ? 'x-circle' : 'check-circle'}"></i>
+                        </button>
+                    </div>
                 </td>
             </tr>
         `).join('');
@@ -138,6 +241,115 @@
         } catch (error) {
             console.error('Error toggling account:', error);
             alert('خطا در تغییر وضعیت حساب');
+        }
+    }
+    
+    function showBalanceModal(accountNumber, currentBalance) {
+        document.getElementById('balance-account-number').value = accountNumber;
+        document.getElementById('balance-current').value = parseFloat(currentBalance).toLocaleString('fa-IR') + ' PERS';
+        document.getElementById('balance-amount').value = '';
+        document.getElementById('balance-new').value = '';
+        document.getElementById('balance-action').value = 'add';
+        updateBalanceInputVisibility();
+        new bootstrap.Modal(document.getElementById('balanceModal')).show();
+    }
+    
+    function updateBalanceInputVisibility() {
+        const action = document.getElementById('balance-action').value;
+        if (action === 'set') {
+            document.getElementById('amount-input-group').classList.add('d-none');
+            document.getElementById('balance-input-group').classList.remove('d-none');
+        } else {
+            document.getElementById('amount-input-group').classList.remove('d-none');
+            document.getElementById('balance-input-group').classList.add('d-none');
+        }
+    }
+    
+    document.getElementById('balance-action').addEventListener('change', updateBalanceInputVisibility);
+    
+    async function updateBalance() {
+        const accountNumber = document.getElementById('balance-account-number').value;
+        const action = document.getElementById('balance-action').value;
+        
+        let data = {};
+        if (action === 'set') {
+            const balance = parseFloat(document.getElementById('balance-new').value);
+            if (isNaN(balance) || balance < 0) {
+                alert('لطفا موجودی معتبر وارد کنید');
+                return;
+            }
+            data = {action: 'set', balance: balance};
+        } else {
+            const amount = parseFloat(document.getElementById('balance-amount').value);
+            if (isNaN(amount)) {
+                alert('لطفا مقدار معتبر وارد کنید');
+                return;
+            }
+            data = {action: 'add', amount: amount};
+        }
+        
+        try {
+            const response = await fetch(`/api/accounts/${accountNumber}/balance`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const result = await response.json();
+            if (result.success) {
+                alert(result.message);
+                bootstrap.Modal.getInstance(document.getElementById('balanceModal')).hide();
+                loadAccounts();
+            } else {
+                alert('خطا: ' + (result.error || 'عملیات ناموفق بود'));
+            }
+        } catch (error) {
+            console.error('Error updating balance:', error);
+            alert('خطا در تغییر موجودی');
+        }
+    }
+    
+    function showResetPasswordModal(accountNumber) {
+        document.getElementById('password-account-number').value = accountNumber;
+        document.getElementById('password-new').value = '';
+        document.getElementById('password-confirm').value = '';
+        new bootstrap.Modal(document.getElementById('resetPasswordModal')).show();
+    }
+    
+    async function resetPassword() {
+        const accountNumber = document.getElementById('password-account-number').value;
+        const newPassword = document.getElementById('password-new').value;
+        const confirmPassword = document.getElementById('password-confirm').value;
+        
+        if (!newPassword || newPassword.length !== 8 || !/^\d+$/.test(newPassword)) {
+            alert('رمز عبور باید دقیقاً ۸ رقم عددی باشد');
+            return;
+        }
+        
+        if (newPassword !== confirmPassword) {
+            alert('رمز عبور و تکرار آن مطابقت ندارند');
+            return;
+        }
+        
+        if (!confirm('آیا مطمئن هستید که می‌خواهید رمز عبور این حساب را تغییر دهید؟')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/accounts/${accountNumber}/reset-password`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({password: newPassword})
+            });
+            const result = await response.json();
+            if (result.success) {
+                alert(result.message);
+                bootstrap.Modal.getInstance(document.getElementById('resetPasswordModal')).hide();
+            } else {
+                alert('خطا: ' + (result.error || 'عملیات ناموفق بود'));
+            }
+        } catch (error) {
+            console.error('Error resetting password:', error);
+            alert('خطا در بازنشانی رمز عبور');
         }
     }
     

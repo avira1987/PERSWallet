@@ -39,8 +39,19 @@ async def delete_previous_messages(update: Update, context: ContextTypes.DEFAULT
                     chat_id=update.effective_chat.id,
                     message_id=last_bot_message_id
                 )
-            except:
-                pass  # Message might already be deleted or not accessible
+                # Clear the message ID from state after successful deletion
+                state.pop('last_bot_message_id', None)
+                encrypted_state = encrypt_state(state)
+                db_manager.update_user_state(user_id, encrypted_state)
+            except Exception as e:
+                # Message might already be deleted or not accessible
+                # Try to clear from state anyway to prevent stale references
+                try:
+                    state.pop('last_bot_message_id', None)
+                    encrypted_state = encrypt_state(state)
+                    db_manager.update_user_state(user_id, encrypted_state)
+                except:
+                    pass
 
 
 async def send_and_save_message(context: ContextTypes.DEFAULT_TYPE, chat_id: int, 

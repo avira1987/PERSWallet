@@ -45,7 +45,9 @@ class TransactionsHandler:
         self.db.update_user_state(user_id, encrypted_state)
         
         # Request password
-        password_text = "لطفا رمز عبور خود را وارد کنید:"
+        password_text = "📋 ۱۰ گردش آخر\n\n"
+        password_text += "برای مشاهده ۱۰ گردش آخر حساب خود، لطفا رمز عبور ۸ رقمی خود را وارد کنید:\n\n"
+        password_text += "⚠️ توجه: برای امنیت بیشتر، رمز عبور شما نمایش داده نمی‌شود."
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -113,7 +115,9 @@ class TransactionsHandler:
         transactions = self.db.get_account_transactions(account.account_number, limit=10)
         
         if not transactions:
-            no_transactions_text = "شما هیچ تراکنشی ندارید."
+            no_transactions_text = "📋 ۱۰ گردش آخر\n\n"
+            no_transactions_text += "شما هنوز هیچ تراکنشی انجام نداده‌اید.\n\n"
+            no_transactions_text += "💡 پس از انجام اولین تراکنش، می‌توانید آن را در این بخش مشاهده کنید."
             
             keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -135,7 +139,9 @@ class TransactionsHandler:
         pdf_buffer = generate_transactions_pdf(transactions, account.account_number)
         
         # Send PDF
-        pdf_text = "۱۰ گردش آخر حساب شما:"
+        pdf_text = "📋 ۱۰ گردش آخر حساب شما\n\n"
+        pdf_text += "فایل PDF شامل جزئیات ۱۰ گردش آخر حساب شما آماده شده است.\n\n"
+        pdf_text += "💡 می‌توانید این فایل را ذخیره کرده و برای مراجعات بعدی استفاده کنید."
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)

@@ -47,8 +47,15 @@ class SendHandler:
         self.db.update_user_state(user_id, encrypted_state)
         
         # Request destination account
-        dest_text = "لطفا آدرس اکانت مقصد را وارد کنید (۱۶ رقم):\n\n"
-        dest_text += "⚠️ توجه: لطفا شماره حساب را با دقت وارد کنید تا دارایی شما از بین نرود."
+        balance = float(account.balance)
+        dest_text = "📤 ارسال PERS\n\n"
+        dest_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        dest_text += f"💼 موجودی فعلی: {balance:,.2f} PERS\n\n"
+        dest_text += "لطفا شماره اکانت مقصد را وارد کنید (۱۶ رقم):\n\n"
+        dest_text += "⚠️ توجه مهم:\n"
+        dest_text += "• شماره حساب را با دقت وارد کنید\n"
+        dest_text += "• پس از ارسال، امکان بازگشت وجود ندارد\n"
+        dest_text += "• کارمزد تراکنش از موجودی شما کسر می‌شود"
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -163,7 +170,9 @@ class SendHandler:
             self.db.update_user_state(user_id, encrypted_state)
             
             # Request password directly
-            password_text = "لطفا رمز عبور خود را وارد کنید:"
+            password_text = "🔐 تایید هویت\n\n"
+            password_text += "لطفا رمز عبور ۸ رقمی خود را وارد کنید:\n\n"
+            password_text += "⚠️ توجه: برای امنیت بیشتر، رمز عبور شما نمایش داده نمی‌شود."
             
             keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -175,7 +184,11 @@ class SendHandler:
             encrypted_state = encrypt_state(state)
             self.db.update_user_state(user_id, encrypted_state)
             
-            amount_text = "لطفا مقدار مورد نظر را وارد کنید (به PERS):"
+            balance = float(account.balance)
+            amount_text = "💰 تعیین مبلغ\n\n"
+            amount_text += f"💼 موجودی فعلی: {balance:,.2f} PERS\n\n"
+            amount_text += "لطفا مقدار مورد نظر را برای ارسال وارد کنید (به PERS):\n\n"
+            amount_text += "⚠️ توجه: کارمزد تراکنش از موجودی شما کسر می‌شود."
             
             keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -315,7 +328,8 @@ class SendHandler:
         destination = state.get('destination')
         
         # Show processing message
-        processing_text = "در حال پردازش تراکنش...\n\nلطفا صبر کنید."
+        processing_text = "⏳ در حال پردازش تراکنش...\n\n"
+        processing_text += "لطفا صبر کنید، این فرآیند ممکن است چند ثانیه طول بکشد."
         processing_msg = await send_and_save_message(context, update.effective_chat.id, processing_text, self.db, user_id)
         
         # Process transaction with retry logic
@@ -363,8 +377,12 @@ class SendHandler:
                 pass
             
             # Show error message
-            error_text = "❌ خطا در پردازش تراکنش.\n\n"
-            error_text += "لطفا دوباره تلاش کنید یا با پشتیبانی تماس بگیرید."
+            error_text = "❌ خطا در پردازش تراکنش\n\n"
+            error_text += "متأسفانه در پردازش تراکنش خطایی رخ داد.\n\n"
+            error_text += "لطفا:\n"
+            error_text += "• دوباره تلاش کنید\n"
+            error_text += "• یا با پشتیبانی تماس بگیرید\n\n"
+            error_text += "⚠️ توجه: در صورت کسر موجودی، مبلغ به حساب شما بازگردانده می‌شود."
             
             keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -398,10 +416,23 @@ class SendHandler:
             # Create admin account if it doesn't exist
             # Use a default password for admin account (should be changed in production)
             try:
-                admin_account = self.db.create_account("admin", admin_account_number, "00000000")
-            except:
-                # Account might already exist, try to get it again
+                # Check again if account exists (race condition protection)
                 admin_account = self.db.get_account_by_number(admin_account_number)
+                if not admin_account:
+                    # Check if account exists using account_exists method
+                    if not self.db.account_exists(admin_account_number):
+                        admin_account = self.db.create_account("admin", admin_account_number, "00000000")
+                    else:
+                        # Account exists but get_account_by_number returned None, try again
+                        admin_account = self.db.get_account_by_number(admin_account_number)
+            except Exception as e:
+                # Account might already exist, try to get it again
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Error creating admin account, trying to get it: {e}")
+                admin_account = self.db.get_account_by_number(admin_account_number)
+                if not admin_account:
+                    raise Exception("Failed to get or create admin account")
         
         while datetime.utcnow() - start_time < timeout:
             # Get current balances

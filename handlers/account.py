@@ -42,8 +42,15 @@ class AccountHandler:
         self.db.update_user_state(user_id, encrypted_state)
         
         # Show account number
-        account_text = f"شماره اکانت شما:\n\n{format_account_number(account_number)}\n\n"
-        account_text += "این شماره اکانت شماست و برای واریز به اکانت خودتان و پرداخت در سایت‌ها از آن استفاده می‌شود."
+        account_text = "✅ اکانت شما ایجاد شد!\n\n"
+        account_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        account_text += f"🔢 شماره اکانت شما:\n{format_account_number(account_number)}\n\n"
+        account_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        account_text += "💡 این شماره اکانت شماست و برای:\n"
+        account_text += "• دریافت PERS از دیگران\n"
+        account_text += "• پرداخت در سایت‌ها\n"
+        account_text += "• شناسایی حساب شما\n\n"
+        account_text += "⚠️ لطفا این شماره را در جای امنی ذخیره کنید."
         
         keyboard = [[InlineKeyboardButton("مرحله بعد", callback_data="next_step")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -71,17 +78,21 @@ class AccountHandler:
             encrypted_state = encrypt_state(state)
             self.db.update_user_state(user_id, encrypted_state)
             
-            # Request password
-            password_text = "لطفا یک رمز عددی ۸ رقمی وارد کنید:\n\n"
-            password_text += "⚠️ توجه: این رمز در همه مراحل تراکنش از شما خواسته می‌شود.\n"
-            password_text += "لطفا آن را در جای امنی ذخیره کنید تا گم نشود.\n"
-            password_text += "در صورت گم شدن رمز، دارایی شما از بین می‌رود و ما مسئولیتی در قبال آن نداریم.\n"
-            password_text += "باید در حفظ و نگهداری آن کوشا باشید!"
-            
-            keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await send_and_save_message(context, update.effective_chat.id, password_text, self.db, user_id, reply_markup=reply_markup)
+        # Request password
+        password_text = "🔐 تعیین رمز عبور\n\n"
+        password_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        password_text += "لطفا یک رمز عددی ۸ رقمی وارد کنید:\n\n"
+        password_text += "⚠️ توجه بسیار مهم:\n"
+        password_text += "• این رمز در همه مراحل تراکنش از شما خواسته می‌شود\n"
+        password_text += "• لطفا آن را در جای امنی ذخیره کنید\n"
+        password_text += "• در صورت گم شدن رمز، دارایی شما از بین می‌رود\n"
+        password_text += "• ما مسئولیتی در قبال گم شدن رمز نداریم\n\n"
+        password_text += "🔒 لطفا در حفظ و نگهداری آن کوشا باشید!"
+        
+        keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await send_and_save_message(context, update.effective_chat.id, password_text, self.db, user_id, reply_markup=reply_markup)
     
     async def handle_password_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle password input during account creation"""
@@ -136,13 +147,18 @@ class AccountHandler:
         # Password is valid, delete previous messages and request confirmation
         await delete_previous_messages(update, context, self.db, user_id, delete_user_message=True)
         
+        # Reset password attempts counter since password is now valid
+        state['password_attempts'] = 0
+        
         # Save password temporarily in state
         state['password'] = password
         state['step'] = 'confirm_password'
         encrypted_state = encrypt_state(state)
         self.db.update_user_state(user_id, encrypted_state)
         
-        confirm_text = "رمز شما ثبت شد. لطفا برای تایید، دوباره همان رمز را وارد کنید:"
+        confirm_text = "✅ رمز شما ثبت شد!\n\n"
+        confirm_text += "لطفا برای تایید، دوباره همان رمز ۸ رقمی را وارد کنید:\n\n"
+        confirm_text += "💡 این مرحله برای اطمینان از صحت رمز شماست."
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -198,29 +214,26 @@ class AccountHandler:
             self.db.update_user_state(user_id, encrypted_state)
             return
         
-        # Password confirmed, delete previous messages and show commitment
+        # Password confirmed, delete previous messages and create account
         await delete_previous_messages(update, context, self.db, user_id, delete_user_message=True)
         
         # Create account
         account_number = state['account_number']
         self.db.create_account(user_id, account_number, password)
         
-        # Update state
-        state['step'] = 'show_commitment'
-        encrypted_state = encrypt_state(state)
-        self.db.update_user_state(user_id, encrypted_state)
+        # Clear state
+        self.db.update_user_state(user_id, "")
         
-        # Show commitment
-        commitment_text = config.COMMITMENT_TEXT + "\n\n"
-        commitment_text += "لطفا متن تعهدنامه را مطالعه کرده و در صورت موافقت، دکمه زیر را بزنید."
+        # Show success message and main menu
+        success_text = "✅ اکانت شما با موفقیت ایجاد شد!\n\n"
+        success_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        success_text += "🎉 اکنون می‌توانید از تمام امکانات ربات استفاده کنید.\n\n"
+        success_text += "💡 برای شروع، از منوی اصلی یکی از گزینه‌ها را انتخاب کنید."
         
-        keyboard = [[InlineKeyboardButton("موافقم و قبول می‌کنم", callback_data="accept_commitment")]]
+        keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await send_and_save_message(context, update.effective_chat.id, commitment_text, self.db, user_id, reply_markup=reply_markup)
-        
-        # Set timeout to delete message after 5 minutes
-        asyncio.create_task(self._timeout_delete_message(context, update.effective_chat.id, update.message.message_id + 1))
+        await send_and_save_message(context, update.effective_chat.id, success_text, self.db, user_id, reply_markup=reply_markup)
     
     async def handle_accept_commitment(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle commitment acceptance"""
@@ -260,7 +273,10 @@ class AccountHandler:
         self.db.update_user_state(user_id, encrypted_state)
         
         # Request account number
-        account_text = "لطفا ۱۶ رقم شماره اکانت خود را وارد کنید:"
+        account_text = "🔓 بازیابی اکانت\n\n"
+        account_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        account_text += "لطفا ۱۶ رقم شماره اکانت خود را وارد کنید:\n\n"
+        account_text += "💡 اگر شماره اکانت خود را فراموش کرده‌اید، می‌توانید از تراکنش‌های قبلی آن را پیدا کنید."
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -352,7 +368,9 @@ class AccountHandler:
         encrypted_state = encrypt_state(state)
         self.db.update_user_state(user_id, encrypted_state)
         
-        password_text = "لطفا رمز عبور خود را وارد کنید:"
+        password_text = "🔐 تایید هویت\n\n"
+        password_text += "لطفا رمز عبور ۸ رقمی خود را وارد کنید:\n\n"
+        password_text += "⚠️ توجه: برای امنیت بیشتر، رمز عبور شما نمایش داده نمی‌شود."
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -416,7 +434,10 @@ class AccountHandler:
         self.db.update_user_state(user_id, "")
         
         # Show main menu
-        success_text = "اکانت شما با موفقیت بازیابی شد!"
+        success_text = "✅ اکانت شما با موفقیت بازیابی شد!\n\n"
+        success_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        success_text += "🎉 اکنون می‌توانید از تمام امکانات ربات استفاده کنید.\n\n"
+        success_text += "💡 برای شروع، از منوی اصلی یکی از گزینه‌ها را انتخاب کنید."
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)

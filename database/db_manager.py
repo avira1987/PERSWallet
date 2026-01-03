@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List
 from decimal import Decimal
 import config
-from database.models import Base, User, Account, Transaction, Lock
+from database.models import Base, User, Account, Transaction, Lock, WithdrawalRequest, TransactionLog
 from utils.encryption import hash_password, verify_password, hash_account_number, verify_account_number
 import logging
 import sys
@@ -49,6 +49,10 @@ class DatabaseManager:
                 self._migrate_is_admin_column()
                 # Migrate: Add username column if it doesn't exist
                 self._migrate_username_column()
+                # Migrate: Create withdrawal_requests table if it doesn't exist
+                self._migrate_withdrawal_requests_table()
+                # Migrate: Create transaction_logs table if it doesn't exist
+                self._migrate_transaction_logs_table()
                 
                 logger.info("PostgreSQL connection successful!")
                 return
@@ -84,6 +88,8 @@ class DatabaseManager:
             self._migrate_is_admin_column()
             # Migrate: Add username column if it doesn't exist
             self._migrate_username_column()
+            # Migrate: Create withdrawal_requests table if it doesn't exist
+            self._migrate_withdrawal_requests_table()
             
             logger.info("Database connection successful!")
         except Exception as e:
@@ -206,6 +212,38 @@ class DatabaseManager:
                         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(255)"))
                     conn.commit()
                 logger.info("Migration completed: username column added")
+        except Exception as e:
+            logger.warning(f"Migration warning (may already exist): {e}")
+    
+    def _migrate_withdrawal_requests_table(self):
+        """Migrate: Create withdrawal_requests table if it doesn't exist"""
+        try:
+            from sqlalchemy import inspect
+
+            inspector = inspect(self.engine)
+            tables = inspector.get_table_names()
+
+            if 'withdrawal_requests' not in tables:
+                logger.info("Migrating: Creating withdrawal_requests table...")
+                # Create the table using SQLAlchemy
+                WithdrawalRequest.__table__.create(self.engine, checkfirst=True)
+                logger.info("Migration completed: withdrawal_requests table created")
+        except Exception as e:
+            logger.warning(f"Migration warning (may already exist): {e}")
+    
+    def _migrate_transaction_logs_table(self):
+        """Migrate: Create transaction_logs table if it doesn't exist"""
+        try:
+            from sqlalchemy import inspect
+
+            inspector = inspect(self.engine)
+            tables = inspector.get_table_names()
+
+            if 'transaction_logs' not in tables:
+                logger.info("Migrating: Creating transaction_logs table...")
+                # Create the table using SQLAlchemy
+                TransactionLog.__table__.create(self.engine, checkfirst=True)
+                logger.info("Migration completed: transaction_logs table created")
         except Exception as e:
             logger.warning(f"Migration warning (may already exist): {e}")
     
@@ -476,6 +514,42 @@ class DatabaseManager:
         finally:
             session.close()
     
+    def create_transaction_log(self, user_id: str, username: Optional[str], transaction_type: str,
+                              from_account: Optional[str], to_account: Optional[str], amount: float,
+                              fee: float, sheba: Optional[str] = None, status: str = 'success',
+                              transaction_id: Optional[int] = None) -> TransactionLog:
+        """Create a comprehensive transaction log with all details"""
+        session = self.get_session()
+        try:
+            # Get username if not provided
+            if not username:
+                user = session.query(User).filter(User.user_id == str(user_id)).first()
+                username = user.username if user else None
+            
+            transaction_log = TransactionLog(
+                user_id=str(user_id),
+                username=username,
+                transaction_type=transaction_type,
+                from_account=from_account,
+                to_account=to_account,
+                amount=Decimal(str(amount)),
+                fee=Decimal(str(fee)),
+                sheba=sheba,
+                status=status,
+                transaction_id=transaction_id,
+                created_at=datetime.utcnow()
+            )
+            session.add(transaction_log)
+            session.commit()
+            session.refresh(transaction_log)
+            return transaction_log
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error creating transaction log: {e}")
+            raise e
+        finally:
+            session.close()
+    
     def get_account_transactions(self, account_number: str, limit: int = 10) -> List[Transaction]:
         session = self.get_session()
         try:
@@ -570,12 +644,20 @@ class DatabaseManager:
             session.close()
     
     def set_admin_status(self, user_id: str, is_admin: bool) -> bool:
-        """Set admin status for a user"""
+        """Set admin status for a user. Only one admin can exist at a time."""
         session = self.get_session()
         try:
             user = session.query(User).filter(User.user_id == str(user_id)).first()
             if not user:
                 return False
+            
+            # If setting this user as admin, remove admin status from all other users
+            if is_admin:
+                # Remove admin status from all other users
+                session.query(User).filter(
+                    User.user_id != str(user_id),
+                    User.is_admin == True
+                ).update({'is_admin': False}, synchronize_session=False)
             
             user.is_admin = is_admin
             user.updated_at = datetime.utcnow()
@@ -594,6 +676,113 @@ class DatabaseManager:
         try:
             user = session.query(User).filter(User.user_id == str(user_id)).first()
             return user.is_admin if user else False
+        finally:
+            session.close()
+    
+    def get_current_admin_user_id(self) -> Optional[str]:
+        """Get the current admin user ID (only one admin exists at a time)"""
+        session = self.get_session()
+        try:
+            admin_user = session.query(User).filter(User.is_admin == True).first()
+            return admin_user.user_id if admin_user else None
+        finally:
+            session.close()
+    
+    def get_admin_account_number(self) -> Optional[str]:
+        """Get the admin's active account number from the current admin user"""
+        admin_user_id = self.get_current_admin_user_id()
+        if not admin_user_id:
+            return None
+        
+        admin_account = self.get_active_account(admin_user_id)
+        return admin_account.account_number if admin_account else None
+    
+    # Withdrawal Request operations
+    def create_withdrawal_request(self, user_id: str, account_number: str, amount_pers: float, 
+                                  amount_toman: float, sheba: str, transaction_id: int = None) -> WithdrawalRequest:
+        """Create a new withdrawal request"""
+        session = self.get_session()
+        try:
+            withdrawal = WithdrawalRequest(
+                user_id=str(user_id),
+                account_number=account_number,
+                amount_pers=Decimal(str(amount_pers)),
+                amount_toman=Decimal(str(amount_toman)),
+                sheba=sheba,
+                status='pending',
+                transaction_id=transaction_id
+            )
+            session.add(withdrawal)
+            session.commit()
+            session.refresh(withdrawal)
+            return withdrawal
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error creating withdrawal request: {e}")
+            raise e
+        finally:
+            session.close()
+    
+    def get_withdrawal_requests(self, status: str = None, limit: int = 100) -> List[WithdrawalRequest]:
+        """Get withdrawal requests, optionally filtered by status"""
+        session = self.get_session()
+        try:
+            query = session.query(WithdrawalRequest)
+            if status:
+                query = query.filter(WithdrawalRequest.status == status)
+            return query.order_by(WithdrawalRequest.created_at.desc()).limit(limit).all()
+        finally:
+            session.close()
+    
+    def get_withdrawal_request(self, request_id: int) -> Optional[WithdrawalRequest]:
+        """Get a withdrawal request by ID"""
+        session = self.get_session()
+        try:
+            return session.query(WithdrawalRequest).filter(WithdrawalRequest.id == request_id).first()
+        finally:
+            session.close()
+    
+    def confirm_withdrawal_request(self, request_id: int, confirmed_by: str) -> bool:
+        """Confirm a withdrawal request (mark as confirmed after admin deposits money)"""
+        session = self.get_session()
+        try:
+            withdrawal = session.query(WithdrawalRequest).filter(WithdrawalRequest.id == request_id).first()
+            if not withdrawal:
+                return False
+            
+            if withdrawal.status != 'pending':
+                return False  # Already processed
+            
+            withdrawal.status = 'confirmed'
+            withdrawal.confirmed_at = datetime.utcnow()
+            withdrawal.confirmed_by = str(confirmed_by)
+            session.commit()
+            return True
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error confirming withdrawal request: {e}")
+            raise e
+        finally:
+            session.close()
+    
+    def complete_withdrawal_request(self, request_id: int) -> bool:
+        """Mark withdrawal request as completed (after sending confirmation message to user)"""
+        session = self.get_session()
+        try:
+            withdrawal = session.query(WithdrawalRequest).filter(WithdrawalRequest.id == request_id).first()
+            if not withdrawal:
+                return False
+            
+            if withdrawal.status != 'confirmed':
+                return False  # Must be confirmed first
+            
+            withdrawal.status = 'completed'
+            session.commit()
+            return True
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error completing withdrawal request: {e}")
+            raise e
         finally:
             session.close()
 

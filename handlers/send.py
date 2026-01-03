@@ -333,6 +333,9 @@ class SendHandler:
         processing_text += "لطفا صبر کنید، این فرآیند ممکن است چند ثانیه طول بکشد."
         processing_msg = await send_and_save_message(context, update.effective_chat.id, processing_text, self.db, user_id)
         
+        # Get username for logging
+        username = update.effective_user.username if update.effective_user else None
+        
         # Process transaction with retry logic
         success = await self._process_transaction_with_retry(
             account.account_number,
@@ -341,7 +344,9 @@ class SendHandler:
             fee,
             context,
             update.effective_chat.id,
-            processing_msg.message_id
+            processing_msg.message_id,
+            user_id=user_id,
+            username=username
         )
         
         if success:
@@ -402,37 +407,25 @@ class SendHandler:
     
     async def _process_transaction_with_retry(self, from_account: str, to_account: str, 
                                             amount: float, fee: float, context: ContextTypes.DEFAULT_TYPE,
-                                            chat_id: int, processing_msg_id: int) -> bool:
+                                            chat_id: int, processing_msg_id: int, user_id: str = None, username: str = None) -> bool:
         """Process transaction with retry logic and verify 3 accounts"""
         start_time = datetime.utcnow()
         timeout = timedelta(seconds=config.TRANSACTION_RETRY_TIMEOUT_SECONDS)
         
-        # Get admin account (assuming admin has account with number starting with '0000000000000000' or similar)
-        # For now, we'll use a special account number for admin
-        admin_account_number = "0000000000000001"  # Admin account
+        # Get admin account number from admin's actual account
+        admin_account_number = self.db.get_admin_account_number()
+        if not admin_account_number:
+            # Admin account not found, cannot process transaction with fee
+            logger = logging.getLogger(__name__)
+            logger.error("Admin account not found. Cannot process transaction with fee.")
+            return False
         
         # Ensure admin account exists
         admin_account = self.db.get_account_by_number(admin_account_number)
         if not admin_account:
-            # Create admin account if it doesn't exist
-            # Use a default password for admin account (should be changed in production)
-            try:
-                # Check again if account exists (race condition protection)
-                admin_account = self.db.get_account_by_number(admin_account_number)
-                if not admin_account:
-                    # Check if account exists using account_exists method
-                    if not self.db.account_exists(admin_account_number):
-                        admin_account = self.db.create_account("admin", admin_account_number, "00000000")
-                    else:
-                        # Account exists but get_account_by_number returned None, try again
-                        admin_account = self.db.get_account_by_number(admin_account_number)
-            except Exception as e:
-                # Account might already exist, try to get it again
-                logger = logging.getLogger(__name__)
-                logger.warning(f"Error creating admin account, trying to get it: {e}")
-                admin_account = self.db.get_account_by_number(admin_account_number)
-                if not admin_account:
-                    raise Exception("Failed to get or create admin account")
+            logger = logging.getLogger(__name__)
+            logger.error(f"Admin account {admin_account_number} not found in database.")
+            return False
         
         while datetime.utcnow() - start_time < timeout:
             # Get current balances
@@ -470,6 +463,21 @@ class SendHandler:
                 abs(admin_balance_after - expected_admin) < 0.01):
                 # Transaction successful
                 self.db.update_transaction_status(transaction.id, 'success')
+                
+                # Create comprehensive transaction log
+                if user_id:
+                    self.db.create_transaction_log(
+                        user_id=user_id,
+                        username=username,
+                        transaction_type='send',
+                        from_account=from_account,
+                        to_account=to_account,
+                        amount=amount,
+                        fee=fee,
+                        sheba=None,
+                        status='success',
+                        transaction_id=transaction.id
+                    )
                 
                 # Send notification to recipient
                 try:

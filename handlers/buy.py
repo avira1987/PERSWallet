@@ -214,12 +214,27 @@ class BuyHandler:
                 pass
         
         # Create transaction record
-        self.db.create_transaction(
+        transaction = self.db.create_transaction(
             from_account=None,
             to_account=account.account_number,
             amount=amount,
             fee=0.0,
             transaction_type='buy'
+        )
+        
+        # Create comprehensive transaction log
+        username = update.effective_user.username if update.effective_user else None
+        self.db.create_transaction_log(
+            user_id=user_id,
+            username=username,
+            transaction_type='buy',
+            from_account=None,
+            to_account=account.account_number,
+            amount=amount,
+            fee=0.0,
+            sheba=None,
+            status='success',
+            transaction_id=transaction.id
         )
         
         # Show success message

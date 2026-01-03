@@ -167,10 +167,6 @@ class BalanceBot:
                 await self.sell_handler.handle_amount_input(update, context)
             elif step == 'enter_sheba':
                 await self.sell_handler.handle_sheba_input(update, context)
-            elif step == 'enter_account_number':
-                await self.sell_handler.handle_account_number_input(update, context)
-            elif step == 'enter_card_number':
-                await self.sell_handler.handle_card_number_input(update, context)
             elif step == 'enter_password':
                 await self.sell_handler.handle_password_input(update, context)
         elif action == 'transactions':

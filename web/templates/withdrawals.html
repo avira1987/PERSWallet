@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}مدیریت درخواست‌های واریز - پنل مدیریت بات{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4"><i class="bi bi-cash-coin"></i> مدیریت درخواست‌های واریز ریالی</h2>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <select class="form-select" id="filter-status">
+                    <option value="">همه وضعیت‌ها</option>
+                    <option value="pending">در انتظار</option>
+                    <option value="confirmed">تایید شده</option>
+                    <option value="completed">تکمیل شده</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-primary w-100" onclick="loadWithdrawals()">
+                    <i class="bi bi-arrow-clockwise"></i> بروزرسانی
+                </button>
+            </div>
+            <div class="col-md-6">
+                <div class="alert alert-info mb-0">
+                    <i class="bi bi-info-circle"></i> 
+                    <strong>راهنما:</strong> پس از واریز مبلغ به حساب کاربر، روی دکمه "تایید واریز" کلیک کنید تا پیام تایید به کاربر ارسال شود.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Withdrawals Table -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">لیست درخواست‌های واریز</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover" id="withdrawals-table">
+                <thead>
+                    <tr>
+                        <th>شماره درخواست</th>
+                        <th>User ID</th>
+                        <th>شماره حساب</th>
+                        <th>مبلغ (PERS)</th>
+                        <th>مبلغ (تومان)</th>
+                        <th>شبا</th>
+                        <th>وضعیت</th>
+                        <th>تاریخ ثبت</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody id="withdrawals-tbody">
+                    <tr>
+                        <td colspan="9" class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">در حال بارگذاری...</span>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Confirmation Modal -->
+<div class="modal fade" id="confirmModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">تایید واریز</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>آیا مطمئن هستید که مبلغ به حساب کاربر واریز شده است؟</p>
+                <div id="withdrawal-details"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">انصراف</button>
+                <button type="button" class="btn btn-primary" onclick="confirmWithdrawal()">بله، تایید می‌کنم</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let allWithdrawals = [];
+    let currentWithdrawalId = null;
+    
+    async function loadWithdrawals() {
+        try {
+            const statusFilter = document.getElementById('filter-status').value;
+            
+            let url = '/api/withdrawals';
+            if (statusFilter) url += `?status=${statusFilter}`;
+            
+            const response = await fetch(url);
+            const data = await response.json();
+            allWithdrawals = data.withdrawals;
+            renderWithdrawals(allWithdrawals);
+        } catch (error) {
+            console.error('Error loading withdrawals:', error);
+            alert('خطا در بارگذاری درخواست‌های واریز');
+        }
+    }
+    
+    function renderWithdrawals(withdrawals) {
+        const tbody = document.getElementById('withdrawals-tbody');
+        
+        if (withdrawals.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center">درخواست واریزی یافت نشد</td></tr>';
+            return;
+        }
+        
+        const statusBadges = {
+            'pending': '<span class="badge bg-warning">در انتظار</span>',
+            'confirmed': '<span class="badge bg-info">تایید شده</span>',
+            'completed': '<span class="badge bg-success">تکمیل شده</span>'
+        };
+        
+        tbody.innerHTML = withdrawals.map(w => {
+            const canConfirm = w.status === 'pending';
+            const confirmButton = canConfirm 
+                ? `<button class="btn btn-sm btn-success" onclick="showConfirmModal(${w.id})">
+                     <i class="bi bi-check-circle"></i> تایید واریز
+                   </button>`
+                : '<span class="text-muted">-</span>';
+            
+            return `
+                <tr>
+                    <td><strong>#${w.id}</strong></td>
+                    <td><code>${w.user_id}</code></td>
+                    <td><code>${w.account_number}</code></td>
+                    <td>${parseFloat(w.amount_pers).toLocaleString('fa-IR')} PERS</td>
+                    <td>${parseFloat(w.amount_toman).toLocaleString('fa-IR')} تومان</td>
+                    <td><code>${w.sheba}</code></td>
+                    <td>${statusBadges[w.status] || w.status}</td>
+                    <td>${w.created_at ? new Date(w.created_at).toLocaleString('fa-IR') : '-'}</td>
+                    <td>${confirmButton}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+    
+    function showConfirmModal(withdrawalId) {
+        currentWithdrawalId = withdrawalId;
+        const withdrawal = allWithdrawals.find(w => w.id === withdrawalId);
+        
+        if (!withdrawal) return;
+        
+        document.getElementById('withdrawal-details').innerHTML = `
+            <div class="card bg-light">
+                <div class="card-body">
+                    <p><strong>شماره درخواست:</strong> #${withdrawal.id}</p>
+                    <p><strong>User ID:</strong> <code>${withdrawal.user_id}</code></p>
+                    <p><strong>مبلغ:</strong> ${parseFloat(withdrawal.amount_pers).toLocaleString('fa-IR')} PERS (${parseFloat(withdrawal.amount_toman).toLocaleString('fa-IR')} تومان)</p>
+                    <p><strong>شبا:</strong> <code>${withdrawal.sheba}</code></p>
+                </div>
+            </div>
+        `;
+        
+        const modal = new bootstrap.Modal(document.getElementById('confirmModal'));
+        modal.show();
+    }
+    
+    async function confirmWithdrawal() {
+        if (!currentWithdrawalId) return;
+        
+        try {
+            const response = await fetch(`/api/withdrawals/${currentWithdrawalId}/confirm`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                alert('درخواست با موفقیت تایید شد و پیام تایید به کاربر ارسال شد.');
+                bootstrap.Modal.getInstance(document.getElementById('confirmModal')).hide();
+                loadWithdrawals();
+            } else {
+                alert('خطا: ' + (data.error || 'خطای نامشخص'));
+            }
+        } catch (error) {
+            console.error('Error confirming withdrawal:', error);
+            alert('خطا در تایید درخواست');
+        }
+    }
+    
+    // Event listeners
+    document.getElementById('filter-status').addEventListener('change', () => loadWithdrawals());
+    
+    // Load withdrawals on page load
+    loadWithdrawals();
+    
+    // Auto-refresh every 30 seconds
+    setInterval(loadWithdrawals, 30000);
+</script>
+{% endblock %}

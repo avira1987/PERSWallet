@@ -98,6 +98,50 @@
     </div>
 </div>
 
+<!-- Admin Wallet Section -->
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card border-primary">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-wallet-fill"></i> کیف پول ادمین</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title text-muted"><i class="bi bi-credit-card"></i> شماره حساب ادمین</h6>
+                                <h4 class="text-primary mb-0" id="admin-account-number">{{ stats.admin_account_number }}</h4>
+                                <small class="text-muted">کارمزدها به این حساب واریز می‌شود</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title text-muted"><i class="bi bi-cash-stack"></i> موجودی حساب ادمین</h6>
+                                <h4 class="text-success mb-0" id="admin-balance">{{ "{:,.2f}".format(stats.admin_balance) }} PERS</h4>
+                                <small class="text-muted">موجودی فعلی حساب ادمین</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title text-muted"><i class="bi bi-receipt-cutoff"></i> مجموع کارمزدهای واریز شده</h6>
+                                <h4 class="text-info mb-0" id="total-fees">{{ "{:,.2f}".format(stats.total_fees) }} PERS</h4>
+                                <small class="text-muted">کل کارمزدهای جمع‌آوری شده از تراکنش‌های موفق</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Charts -->
 <div class="row g-3">
     <div class="col-md-6">
@@ -176,6 +220,17 @@
             document.getElementById('active-accounts').textContent = stats.active_accounts;
             document.getElementById('total-transactions').textContent = stats.total_transactions;
             document.getElementById('total-balance').textContent = parseFloat(stats.total_balance).toLocaleString('fa-IR') + ' PERS';
+            
+            // Update admin wallet info
+            if (stats.admin_account_number) {
+                document.getElementById('admin-account-number').textContent = stats.admin_account_number;
+            }
+            if (stats.admin_balance !== undefined) {
+                document.getElementById('admin-balance').textContent = parseFloat(stats.admin_balance).toLocaleString('fa-IR') + ' PERS';
+            }
+            if (stats.total_fees !== undefined) {
+                document.getElementById('total-fees').textContent = parseFloat(stats.total_fees).toLocaleString('fa-IR') + ' PERS';
+            }
         } catch (error) {
             console.error('Error refreshing stats:', error);
         }

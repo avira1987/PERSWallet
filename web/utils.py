@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from database.models import User, Account, Transaction, Lock
+from sqlalchemy import func
 import logging
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,22 @@ def calculate_stats(db_manager):
             Lock.locked_until > datetime.utcnow()
         ).count()
         
+        # Get current admin account number
+        admin_account_number = db_manager.get_admin_account_number()
+        admin_balance = 0.0
+        if admin_account_number:
+            admin_account = session.query(Account).filter(
+                Account.account_number == admin_account_number
+            ).first()
+            if admin_account:
+                admin_balance = float(admin_account.balance) if admin_account.balance is not None else 0.0
+        
+        # Total fees collected (sum of all fees from successful transactions)
+        total_fees = session.query(func.sum(Transaction.fee)).filter(
+            Transaction.status == 'success'
+        ).scalar()
+        total_fees = float(total_fees) if total_fees is not None else 0.0
+        
         return {
             'total_users': total_users,
             'total_accounts': total_accounts,
@@ -67,7 +84,10 @@ def calculate_stats(db_manager):
             'sell_count': sell_count,
             'send_count': send_count,
             'recent_transactions': recent_transactions,
-            'locked_users': locked_users
+            'locked_users': locked_users,
+            'admin_account_number': admin_account_number or 'ندارد',
+            'admin_balance': admin_balance,
+            'total_fees': total_fees
         }
     except Exception as e:
         logger.error(f"Error calculating stats: {e}", exc_info=True)
@@ -84,7 +104,10 @@ def calculate_stats(db_manager):
             'sell_count': 0,
             'send_count': 0,
             'recent_transactions': 0,
-            'locked_users': 0
+            'locked_users': 0,
+            'admin_account_number': 'ندارد',
+            'admin_balance': 0.0,
+            'total_fees': 0.0
         }
     finally:
         session.close()

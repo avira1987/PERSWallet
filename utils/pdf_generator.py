@@ -247,7 +247,9 @@ def generate_transactions_pdf(transactions: List[Transaction], account_number: s
         from_acc = trans.from_account or '-'
         to_acc = trans.to_account or '-'
         amount = f"{float(trans.amount):,.2f}"
-        fee = f"{float(trans.fee):,.2f}"
+        # Ensure fee is properly converted from Decimal/None to float
+        fee_value = float(trans.fee) if trans.fee is not None else 0.0
+        fee = f"{fee_value:,.2f}"
         date = convert_to_jalali_short(trans.created_at)
         
         # Use Paragraph objects for all cells and reshape Persian text

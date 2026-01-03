@@ -186,7 +186,7 @@
         });
         
         if (filteredAccounts.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center">حسابی یافت نشد</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center">حسابی یافت نشد</td></tr>';
             return;
         }
         
@@ -194,6 +194,7 @@
             <tr>
                 <td><code>${account.account_number}</code></td>
                 <td>${account.user_id}</td>
+                <td>${account.username ? '@' + account.username : '-'}</td>
                 <td>${parseFloat(account.balance).toLocaleString('fa-IR')} PERS</td>
                 <td>
                     ${account.is_active 

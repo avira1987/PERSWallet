@@ -6,6 +6,10 @@ load_dotenv()
 # Bot Configuration
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 ADMIN_USER_ID = int(os.getenv('ADMIN_USER_ID', 0))
+# Support channel/group chat ID (optional, for sending notifications to @PERS_coin_bot_support)
+# For channels/groups, use format: -1001234567890 (negative number)
+# Leave empty or 0 to use ADMIN_USER_ID instead
+SUPPORT_CHAT_ID = int(os.getenv('SUPPORT_CHAT_ID', 0)) if os.getenv('SUPPORT_CHAT_ID') else None
 
 # Database Configuration
 # Use SQLite as fallback if PostgreSQL is not available

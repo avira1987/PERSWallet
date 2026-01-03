@@ -62,3 +62,45 @@ class Lock(Base):
     
     user = relationship("User", back_populates="lock")
 
+
+class WithdrawalRequest(Base):
+    __tablename__ = 'withdrawal_requests'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(50), ForeignKey('users.user_id'), nullable=False)
+    account_number = Column(String(16), ForeignKey('accounts.account_number'), nullable=False)
+    amount_pers = Column(Numeric(20, 2), nullable=False)  # Amount in PERS
+    amount_toman = Column(Numeric(20, 2), nullable=False)  # Amount in Toman
+    sheba = Column(String(26), nullable=False)  # IBAN number
+    status = Column(String(20), default='pending')  # pending, confirmed, completed
+    transaction_id = Column(Integer, ForeignKey('transactions.id'), nullable=True)
+    confirmed_at = Column(DateTime, nullable=True)
+    confirmed_by = Column(String(50), nullable=True)  # Admin user_id who confirmed
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User")
+    account = relationship("Account")
+    transaction = relationship("Transaction")
+
+
+class TransactionLog(Base):
+    __tablename__ = 'transaction_logs'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(50), ForeignKey('users.user_id'), nullable=False)
+    username = Column(String(255), nullable=True)
+    transaction_type = Column(String(20), nullable=False)  # buy, send, sell
+    from_account = Column(String(16), ForeignKey('accounts.account_number'), nullable=True)
+    to_account = Column(String(16), ForeignKey('accounts.account_number'), nullable=True)
+    amount = Column(Numeric(20, 2), nullable=False)
+    fee = Column(Numeric(20, 2), default=0.00)
+    sheba = Column(String(26), nullable=True)  # IBAN number for sell transactions
+    status = Column(String(20), default='success')  # success, failed, pending
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    transaction_id = Column(Integer, ForeignKey('transactions.id'), nullable=True)
+    
+    user = relationship("User")
+    from_account_rel = relationship("Account", foreign_keys=[from_account])
+    to_account_rel = relationship("Account", foreign_keys=[to_account])
+    transaction = relationship("Transaction")
+

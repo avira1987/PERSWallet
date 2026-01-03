@@ -8,7 +8,8 @@ import json
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database.db_manager import DatabaseManager
-from database.models import User, Account, Transaction, Lock
+from database.models import User, Account, Transaction, Lock, WithdrawalRequest
+import config
 from web.utils import format_number, format_date, calculate_stats
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
@@ -336,6 +337,127 @@ def tutorial():
     return render_template('tutorial.html')
 
 
+@app.route('/withdrawals')
+def withdrawals():
+    """Withdrawal requests management page"""
+    return render_template('withdrawals.html')
+
+
+@app.route('/api/withdrawals')
+def api_withdrawals():
+    """API endpoint for withdrawal requests list"""
+    session = db_manager.get_session()
+    try:
+        status = request.args.get('status', None)
+        withdrawals_list = db_manager.get_withdrawal_requests(status=status, limit=500)
+        
+        result = []
+        for w in withdrawals_list:
+            result.append({
+                'id': w.id,
+                'user_id': w.user_id,
+                'account_number': w.account_number,
+                'amount_pers': float(w.amount_pers),
+                'amount_toman': float(w.amount_toman),
+                'sheba': w.sheba,
+                'status': w.status,
+                'transaction_id': w.transaction_id,
+                'confirmed_at': w.confirmed_at.isoformat() if w.confirmed_at else None,
+                'confirmed_by': w.confirmed_by,
+                'created_at': w.created_at.isoformat() if w.created_at else None
+            })
+        
+        return jsonify({'withdrawals': result})
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error in api_withdrawals: {e}", exc_info=True)
+        return jsonify({'error': 'خطا در بارگذاری درخواست‌های واریز', 'details': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/withdrawals/<int:request_id>/confirm', methods=['POST'])
+def api_confirm_withdrawal(request_id):
+    """Confirm a withdrawal request and send confirmation message to user"""
+    try:
+        # Get withdrawal request
+        withdrawal = db_manager.get_withdrawal_request(request_id)
+        if not withdrawal:
+            return jsonify({'error': 'درخواست یافت نشد'}), 404
+        
+        if withdrawal.status != 'pending':
+            return jsonify({'error': 'این درخواست قبلا پردازش شده است'}), 400
+        
+        # Confirm the withdrawal
+        confirmed_by = 'admin'  # You can get this from session if you have admin login
+        success = db_manager.confirm_withdrawal_request(request_id, confirmed_by)
+        
+        if not success:
+            return jsonify({'error': 'خطا در تایید درخواست'}), 500
+        
+        # Send confirmation message to user via Telegram
+        try:
+            send_telegram_message(
+                user_id=withdrawal.user_id,
+                message=create_withdrawal_confirmation_message(withdrawal)
+            )
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error sending Telegram message: {e}", exc_info=True)
+            # Don't fail the request if message sending fails
+        
+        # Mark as completed after sending message
+        db_manager.complete_withdrawal_request(request_id)
+        
+        return jsonify({'success': True, 'message': 'درخواست با موفقیت تایید شد و پیام به کاربر ارسال شد'})
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error in api_confirm_withdrawal: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+def send_telegram_message(user_id: str, message: str):
+    """Send a Telegram message to a user"""
+    try:
+        from telegram import Bot
+        import asyncio
+        
+        if not config.BOT_TOKEN:
+            raise Exception("BOT_TOKEN is not set")
+        
+        bot = Bot(token=config.BOT_TOKEN)
+        
+        # Run async function
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(bot.send_message(chat_id=user_id, text=message))
+        loop.close()
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error sending Telegram message to {user_id}: {e}")
+        raise
+
+
+def create_withdrawal_confirmation_message(withdrawal: WithdrawalRequest) -> str:
+    """Create confirmation message for withdrawal"""
+    message = "✅ واریز ریالی شما انجام شد!\n\n"
+    message += "━━━━━━━━━━━━━━━━━━━━\n\n"
+    message += f"💰 مبلغ واریز شده: {float(withdrawal.amount_toman):,.0f} تومان\n"
+    message += f"💼 معادل PERS: {float(withdrawal.amount_pers):,.2f} PERS\n"
+    message += f"🏦 شماره شبا: {withdrawal.sheba}\n"
+    message += f"🆔 شماره درخواست: #{withdrawal.id}\n\n"
+    message += "━━━━━━━━━━━━━━━━━━━━\n\n"
+    message += "🎉 مبلغ به حساب بانکی شما واریز شده است.\n\n"
+    message += "💡 در صورت هرگونه مشکل، با پشتیبانی تماس بگیرید:\n"
+    message += "📞 @PERS_coin_bot_support"
+    
+    return message
+
+
 @app.route('/api/transactions')
 def api_transactions():
     """API endpoint for transactions list"""
@@ -365,12 +487,14 @@ def api_transactions():
         
         result = []
         for trans in transactions_list:
+            # Ensure fee is properly converted from Decimal/None to float
+            fee_value = float(trans.fee) if trans.fee is not None else 0.0
             result.append({
                 'id': trans.id,
                 'from_account': trans.from_account,
                 'to_account': trans.to_account,
                 'amount': float(trans.amount),
-                'fee': float(trans.fee),
+                'fee': fee_value,
                 'transaction_type': trans.transaction_type,
                 'status': trans.status,
                 'created_at': trans.created_at.isoformat() if trans.created_at else None

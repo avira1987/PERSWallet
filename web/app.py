@@ -28,8 +28,14 @@ STATIC_DIR = os.path.join(BASE_DIR, 'static')
 
 app = Flask(__name__, template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
 
-# Security: Use secret key from config (will fail if not set)
-app.secret_key = config.WEB_SECRET_KEY if hasattr(config, 'WEB_SECRET_KEY') else os.getenv('WEB_SECRET_KEY', '')
+# Security: Use secret key from config (required for web interface)
+if not config.WEB_SECRET_KEY:
+    import sys
+    print("ERROR: WEB_SECRET_KEY environment variable is required for web interface!")
+    print("Please set WEB_SECRET_KEY in your .env file.")
+    print("Generate a secure key using: python -c \"import secrets; print(secrets.token_urlsafe(32))\"")
+    sys.exit(1)
+app.secret_key = config.WEB_SECRET_KEY
 
 # CSRF Protection
 csrf = CSRFProtect(app)

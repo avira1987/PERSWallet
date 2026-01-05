@@ -29,14 +29,8 @@ if not ENCRYPTION_KEY_ENV:
     sys.exit(1)
 ENCRYPTION_KEY = ENCRYPTION_KEY_ENV.encode() if ENCRYPTION_KEY_ENV else b''
 
-# Web Configuration
+# Web Configuration (only required when running web interface)
 WEB_SECRET_KEY = os.getenv('WEB_SECRET_KEY', '')
-if not WEB_SECRET_KEY:
-    import sys
-    print("ERROR: WEB_SECRET_KEY environment variable is required for web interface!")
-    print("Please set WEB_SECRET_KEY in your .env file.")
-    print("Generate a secure key using: python -c \"import secrets; print(secrets.token_urlsafe(32))\"")
-    sys.exit(1)
 
 # Application Constants
 PERS_TO_TOMAN = 1000  # 1 PERS = 1000 Toman = 10000 Rial

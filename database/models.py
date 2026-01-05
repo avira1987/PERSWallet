@@ -104,3 +104,20 @@ class TransactionLog(Base):
     to_account_rel = relationship("Account", foreign_keys=[to_account])
     transaction = relationship("Transaction")
 
+
+class PaymentLink(Base):
+    __tablename__ = 'payment_links'
+    
+    token = Column(String(64), primary_key=True)  # Unique token for the payment link
+    destination_account = Column(String(16), ForeignKey('accounts.account_number'), nullable=True)
+    amount = Column(Numeric(20, 2), nullable=False)
+    created_by = Column(String(50), ForeignKey('users.user_id'), nullable=False)  # User who created the link
+    is_used = Column(Boolean, default=False)  # Whether the link has been used
+    used_at = Column(DateTime, nullable=True)  # When the link was used
+    used_by = Column(String(50), ForeignKey('users.user_id'), nullable=True)  # User who used the link
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    creator = relationship("User", foreign_keys=[created_by])
+    user = relationship("User", foreign_keys=[used_by])
+    account = relationship("Account")
+

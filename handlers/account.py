@@ -3,7 +3,7 @@ from telegram.ext import ContextTypes
 from database.db_manager import DatabaseManager
 from utils.encryption import encrypt_state, decrypt_state
 from utils.lock_manager import LockManager
-from utils.validators import validate_password, validate_account_number
+from utils.validators import validate_password, validate_account_number, normalize_persian_digits
 from utils.generators import generate_account_number, format_account_number
 from utils.message_manager import delete_previous_messages, send_and_save_message, edit_and_save_message
 import config
@@ -99,6 +99,9 @@ class AccountHandler:
         user_id = str(update.effective_user.id)
         password = update.message.text.strip()
         
+        # Normalize Persian digits to English digits
+        password = normalize_persian_digits(password)
+        
         # Check if user is locked
         is_locked, lock_message = self.lock_manager.check_lock(user_id)
         if is_locked:
@@ -169,6 +172,9 @@ class AccountHandler:
         """Handle password confirmation"""
         user_id = str(update.effective_user.id)
         password = update.message.text.strip()
+        
+        # Normalize Persian digits to English digits
+        password = normalize_persian_digits(password)
         
         # Check if user is locked
         is_locked, lock_message = self.lock_manager.check_lock(user_id)
@@ -381,6 +387,9 @@ class AccountHandler:
         """Handle password input during recovery"""
         user_id = str(update.effective_user.id)
         password = update.message.text.strip()
+        
+        # Normalize Persian digits to English digits
+        password = normalize_persian_digits(password)
         
         # Check if user is locked
         is_locked, lock_message = self.lock_manager.check_lock(user_id)

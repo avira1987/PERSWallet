@@ -3,6 +3,7 @@ from telegram.ext import ContextTypes
 from database.db_manager import DatabaseManager
 from utils.encryption import encrypt_state, decrypt_state
 from utils.lock_manager import LockManager
+from typing import Optional
 import asyncio
 import os
 import logging
@@ -13,189 +14,467 @@ class StartHandler:
         self.db = db_manager
         self.lock_manager = lock_manager
     
-    async def handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /start command"""
+    async def handle_payment_link_processing(self, update: Update, context: ContextTypes.DEFAULT_TYPE, 
+                                            destination_account: Optional[str], amount: float, 
+                                            token: Optional[str] = None) -> bool:
+        """
+        Process payment link - extracted to be reusable from both /start and text messages
+        Returns: True if payment link was processed, False otherwise
+        """
         user_id = str(update.effective_user.id)
-        username = update.effective_user.username  # Get username from Telegram
         
-        # Check if user is locked
-        is_locked, lock_message = self.lock_manager.check_lock(user_id)
-        if is_locked:
-            await update.message.reply_text(lock_message)
-            return
-        
-        # Get or create user (and update username if available)
-        user = self.db.get_or_create_user(user_id, username)
-        
-        # Check for payment link parameter (deep link)
-        # Format: /start pay_{destination_account}_{amount}
-        # Log for debugging
-        logger = logging.getLogger(__name__)
-        if context.args:
-            logger.info(f"Deep link args received: {context.args}")
-        
-        if context.args and len(context.args) > 0 and context.args[0].startswith('pay_'):
-            # This is a payment link click
-            try:
-                # Parse payment link: pay_{destination_account}_{amount}
-                link_parts = context.args[0].replace('pay_', '').split('_')
-                if len(link_parts) == 2:
-                    destination_account = link_parts[0]
-                    amount = float(link_parts[1])
-                else:
-                    # Old format support: pay_{amount} (backward compatibility)
-                    amount = float(context.args[0].replace('pay_', ''))
-                    destination_account = None
-                
-                # Check if user has accepted agreement
-                if not self.db.has_accepted_agreement(user_id):
-                    # Store payment link info in state for later use after agreement
-                    from utils.encryption import encrypt_state
-                    state = {
-                        'pending_payment_link': True,
-                        'payment_link_amount': amount,
-                        'payment_link_destination': destination_account
-                    }
-                    encrypted_state = encrypt_state(state)
-                    self.db.update_user_state(user_id, encrypted_state)
-                    # Show agreement first
-                    await self.show_agreement(update, context)
-                    return
-                
-                # Check if user has account
-                account = self.db.get_active_account(user_id)
-                if not account:
-                    # User doesn't have account
-                    from utils.message_manager import send_and_save_message
-                    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-                    
-                    error_text = "⚠️ برای استفاده از این لینک پرداخت\n\n"
-                    error_text += "شما باید ابتدا یک اکانت در ربات بسازید.\n\n"
-                    error_text += "💡 پس از ساخت اکانت، می‌توانید از لینک پرداخت استفاده کنید."
-                    keyboard = [[InlineKeyboardButton("ساخت اکانت", callback_data="create_account")]]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                    await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)
-                    return
-                
-                # Check if destination account exists
-                if destination_account:
-                    dest_account = self.db.get_account_by_number(destination_account)
-                    if not dest_account:
-                        from utils.message_manager import send_and_save_message
-                        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-                        
-                        error_text = "❌ خطا در لینک پرداخت\n\n"
-                        error_text += "شماره حساب مقصد در لینک پرداخت معتبر نیست."
-                        keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
-                        reply_markup = InlineKeyboardMarkup(keyboard)
-                        await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)
-                        return
-                    
-                    # Check if user is trying to send to themselves
-                    if destination_account == account.account_number:
-                        from utils.message_manager import send_and_save_message
-                        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-                        
-                        error_text = "⚠️ شما نمی‌توانید به خودتان پرس ارسال کنید."
-                        keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
-                        reply_markup = InlineKeyboardMarkup(keyboard)
-                        await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)
-                        return
-                    
-                    # Check balance before proceeding
-                    import config
-                    balance = float(account.balance)
-                    fee = min(amount * config.TRANSACTION_FEE_PERCENT, config.MAX_TRANSACTION_FEE)
-                    total_needed = amount + fee
-                    
-                    if balance < total_needed:
-                        from utils.message_manager import send_and_save_message
-                        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-                        
-                        error_text = f"❌ موجودی شما کافی نیست.\n\n"
-                        error_text += f"موجودی: {balance:,.2f} PERS\n"
-                        error_text += f"مبلغ مورد نیاز: {total_needed:,.2f} PERS (مبلغ + کارمزد)"
-                        keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
-                        reply_markup = InlineKeyboardMarkup(keyboard)
-                        await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)
-                        return
-                
-                # User has account, start send process with pre-filled destination and amount
-                from utils.encryption import encrypt_state
+        # If token is provided, check if it's a token-based link
+        if token:
+            # Check if payment link exists and is not used
+            payment_link = self.db.get_payment_link(token)
+            if not payment_link:
                 from utils.message_manager import send_and_save_message
                 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-                import config
                 
-                if destination_account:
-                    # New format: start send process with destination and amount pre-filled
-                    # Calculate fee (already calculated above if balance check passed)
-                    if 'fee' not in locals():
-                        fee = min(amount * config.TRANSACTION_FEE_PERCENT, config.MAX_TRANSACTION_FEE)
-                    
-                    state = {
-                        'action': 'send_pers',
-                        'step': 'enter_password',
-                        'destination': destination_account,
-                        'amount': amount,
-                        'fee': fee,
-                        'payment_link_amount': amount,
-                        'from_payment_link': True
-                    }
-                    encrypted_state = encrypt_state(state)
-                    self.db.update_user_state(user_id, encrypted_state)
-                    
-                    send_text = "🔗 لینک پرداخت\n\n"
-                    send_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
-                    send_text += f"💰 مبلغ: {amount:,.2f} PERS\n\n"
-                    send_text += "برای ارسال این مبلغ، لطفا رمز عبور ۸ رقمی خود را وارد کنید:\n\n"
-                    send_text += "⚠️ توجه: برای امنیت بیشتر، رمز عبور شما نمایش داده نمی‌شود."
-                    
-                    keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                    await send_and_save_message(context, update.effective_chat.id, send_text, self.db, user_id, reply_markup=reply_markup)
-                else:
-                    # Old format: treat as buy (backward compatibility)
-                    state = {
-                        'action': 'buy_pers',
-                        'step': 'enter_password',
-                        'amount': amount,
-                        'from_payment_link': True
-                    }
-                    encrypted_state = encrypt_state(state)
-                    self.db.update_user_state(user_id, encrypted_state)
-                    
-                    buy_text = "🔗 لینک پرداخت\n\n"
-                    buy_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
-                    buy_text += f"💰 مبلغ: {amount:,.2f} PERS\n\n"
-                    buy_text += "برای شارژ حساب خود، لطفا رمز عبور ۸ رقمی خود را وارد کنید:\n\n"
-                    buy_text += "⚠️ توجه: برای امنیت بیشتر، رمز عبور شما نمایش داده نمی‌شود."
-                    
-                    keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                    await send_and_save_message(context, update.effective_chat.id, buy_text, self.db, user_id, reply_markup=reply_markup)
-                return
-            except (ValueError, IndexError):
-                # Invalid payment link format, continue to normal start flow
-                pass
+                error_text = "❌ خطا در لینک پرداخت\n\nلینک پرداخت معتبر نیست."
+                keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)
+                return True
+            
+            # Check if link has already been used
+            if payment_link.is_used:
+                from utils.message_manager import send_and_save_message
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                
+                error_text = "❌ این لینک پرداخت قبلا استفاده شده است.\n\n"
+                error_text += "⚠️ لینک‌های پرداخت فقط یکبار قابل استفاده هستند."
+                keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)
+                return True
+            
+            # Get destination account and amount from payment link
+            destination_account = payment_link.destination_account
+            amount = float(payment_link.amount)
         
         # Check if user has accepted agreement
         if not self.db.has_accepted_agreement(user_id):
-            # Show agreement first
-            await self.show_agreement(update, context)
-            return
+            # Store payment link info in state for later use after agreement
+            from utils.encryption import encrypt_state
+            state = {
+                'pending_payment_link': True,
+                'payment_link_amount': amount,
+                'payment_link_destination': destination_account,
+                'payment_link_token': token
+            }
+            encrypted_state = encrypt_state(state)
+            self.db.update_user_state(user_id, encrypted_state)
+            # Show agreement first (with payment link indicator)
+            await self.show_agreement(update, context, from_payment_link=True)
+            return True
         
-        # Check if user has active account
-        active_account = self.db.get_active_account(user_id)
+        # Check if user has account
+        account = self.db.get_active_account(user_id)
+        if not account:
+            # User doesn't have account
+            from utils.message_manager import send_and_save_message
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            
+            error_text = "⚠️ برای استفاده از این لینک پرداخت\n\n"
+            error_text += "شما باید ابتدا یک اکانت در ربات بسازید.\n\n"
+            error_text += "💡 پس از ساخت اکانت، می‌توانید از لینک پرداخت استفاده کنید."
+            keyboard = [[InlineKeyboardButton("ساخت اکانت", callback_data="create_account")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)
+            return True
         
-        if active_account:
-            # User has account, show main menu
-            await self.show_main_menu(update, context)
+        # Check if destination account exists
+        if destination_account:
+            dest_account = self.db.get_account_by_number(destination_account)
+            if not dest_account:
+                from utils.message_manager import send_and_save_message
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                
+                error_text = "❌ خطا در لینک پرداخت\n\n"
+                error_text += "شماره حساب مقصد در لینک پرداخت معتبر نیست."
+                keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)
+                return True
+            
+            # Check if user is trying to send to themselves
+            if destination_account == account.account_number:
+                from utils.message_manager import send_and_save_message
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                
+                error_text = "⚠️ شما نمی‌توانید به خودتان پرس ارسال کنید."
+                keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)
+                return True
+            
+            # Check balance before proceeding
+            import config
+            balance = float(account.balance)
+            fee = min(amount * config.TRANSACTION_FEE_PERCENT, config.MAX_TRANSACTION_FEE)
+            total_needed = amount + fee
+            
+            if balance < total_needed:
+                from utils.message_manager import send_and_save_message
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                
+                error_text = f"❌ موجودی شما کافی نیست.\n\n"
+                error_text += f"موجودی: {balance:,.2f} PERS\n"
+                error_text += f"مبلغ مورد نیاز: {total_needed:,.2f} PERS (مبلغ + کارمزد)"
+                keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)
+                return True
+            
+            # ✅ انتقال اعتبار به صورت خودکار (مثل bot__.py)
+            # Get admin account for fee
+            admin_account_number = self.db.get_admin_account_number()
+            if not admin_account_number:
+                from utils.message_manager import send_and_save_message
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                
+                error_text = "❌ خطا در سیستم\n\nحساب ادمین یافت نشد. لطفا با پشتیبانی تماس بگیرید."
+                keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)
+                return True
+            
+            # Ensure admin account exists
+            admin_account = self.db.get_account_by_number(admin_account_number)
+            if not admin_account:
+                from utils.message_manager import send_and_save_message
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                
+                error_text = f"❌ خطا در سیستم\n\nحساب ادمین {admin_account_number} در دیتابیس یافت نشد."
+                keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)
+                return True
+            
+            # Perform transaction directly (like bot__.py)
+            logger = logging.getLogger(__name__)
+            try:
+                # Get balances before transaction
+                from_balance_before = self.db.get_account_balance(account.account_number)
+                to_balance_before = self.db.get_account_balance(destination_account)
+                admin_balance_before = self.db.get_account_balance(admin_account_number)
+                
+                logger.info(f"Processing payment link - From: {account.account_number}, To: {destination_account}, Amount: {amount}, Fee: {fee}")
+                logger.info(f"Balances before - From: {from_balance_before}, To: {to_balance_before}, Admin: {admin_balance_before}")
+                
+                # Perform transaction
+                self.db.update_account_balance(account.account_number, -(amount + fee))
+                self.db.update_account_balance(destination_account, amount)
+                self.db.update_account_balance(admin_account_number, fee)
+                
+                # Verify balances after transaction
+                from_balance_after = self.db.get_account_balance(account.account_number)
+                to_balance_after = self.db.get_account_balance(destination_account)
+                admin_balance_after = self.db.get_account_balance(admin_account_number)
+                
+                logger.info(f"Balances after - From: {from_balance_after}, To: {to_balance_after}, Admin: {admin_balance_after}")
+                
+                # Create transaction record
+                transaction = self.db.create_transaction(
+                    from_account=account.account_number,
+                    to_account=destination_account,
+                    amount=amount,
+                    fee=fee,
+                    transaction_type='send'
+                )
+                
+                # Update transaction status
+                self.db.update_transaction_status(transaction.id, 'success')
+                
+                # Create comprehensive transaction log
+                username = update.effective_user.username if update.effective_user else None
+                self.db.create_transaction_log(
+                    user_id=user_id,
+                    username=username,
+                    transaction_type='send',
+                    from_account=account.account_number,
+                    to_account=destination_account,
+                    amount=amount,
+                    fee=fee,
+                    sheba=None,
+                    status='success',
+                    transaction_id=transaction.id
+                )
+                
+                logger.info(f"Transaction successful - ID: {transaction.id}")
+                
+                # Mark payment link as used and notify creator if token was provided
+                if token:
+                    # Get payment link before marking as used
+                    payment_link = self.db.get_payment_link(token)
+                    self.db.mark_payment_link_as_used(token, user_id)
+                    
+                    # Send notification to payment link creator
+                    if payment_link and payment_link.created_by:
+                        try:
+                            creator_user_id = payment_link.created_by
+                            
+                            notification_text = "🔔 اطلاع از استفاده لینک پرداخت\n\n"
+                            notification_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+                            notification_text += f"✅ لینک پرداخت شما استفاده شد!\n\n"
+                            notification_text += f"💰 مبلغ واریز شده: {amount:,.2f} PERS\n"
+                            notification_text += f"💳 کارمزد: {fee:,.2f} PERS\n"
+                            notification_text += f"📤 از حساب: {account.account_number}\n"
+                            notification_text += f"📥 به حساب شما: {destination_account}\n\n"
+                            
+                            # Get creator's account balance for destination account
+                            dest_account = self.db.get_account_by_number(destination_account)
+                            if dest_account:
+                                creator_balance = float(self.db.get_account_balance(destination_account))
+                                notification_text += f"💼 موجودی جدید حساب شما: {creator_balance:,.2f} PERS\n\n"
+                            
+                            notification_text += "━━━━━━━━━━━━━━━━━━━━"
+                            
+                            await context.bot.send_message(chat_id=int(creator_user_id), text=notification_text)
+                            logger.info(f"Notification sent to payment link creator: {creator_user_id}")
+                        except Exception as e:
+                            # User might have blocked the bot, ignore the error
+                            logger.warning(f"Could not send notification to payment link creator: {e}")
+                
+                # Send success message to sender
+                from utils.message_manager import send_and_save_message
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                
+                success_text = f"✅ پرداخت با موفقیت انجام شد!\n\n"
+                success_text += f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                success_text += f"💰 مبلغ: {amount:,.2f} PERS\n"
+                success_text += f"📤 به حساب: {destination_account}\n"
+                success_text += f"💳 کارمزد: {fee:,.2f} PERS\n\n"
+                new_balance = float(self.db.get_account_balance(account.account_number))
+                success_text += f"💼 موجودی جدید شما: {new_balance:,.2f} PERS\n\n"
+                success_text += f"━━━━━━━━━━━━━━━━━━━━"
+                
+                keyboard = [
+                    [InlineKeyboardButton("💰 موجودی حساب", callback_data="balance")],
+                    [InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await send_and_save_message(context, update.effective_chat.id, success_text, self.db, user_id, reply_markup=reply_markup)
+                
+                # Send notification to recipient (like bot__.py does)
+                try:
+                    dest_account = self.db.get_account_by_number(destination_account)
+                    if dest_account:
+                        recipient_user_id = dest_account.user_id
+                        recipient_balance = float(self.db.get_account_balance(destination_account))
+                        
+                        notification_text = "✅ واریز به حساب شما\n\n"
+                        notification_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+                        notification_text += f"💰 مبلغ واریزی: {amount:,.2f} PERS\n\n"
+                        notification_text += f"از حساب: {account.account_number}\n\n"
+                        notification_text += f"💼 موجودی جدید حساب: {recipient_balance:,.2f} PERS\n\n"
+                        notification_text += "━━━━━━━━━━━━━━━━━━━━"
+                        
+                        await context.bot.send_message(chat_id=int(recipient_user_id), text=notification_text)
+                        logger.info(f"Notification sent to recipient: {recipient_user_id}")
+                except Exception as e:
+                    # User might have blocked the bot, ignore the error
+                    logger.warning(f"Could not send notification to recipient {destination_account}: {e}")
+                
+                return True
+                
+            except Exception as e:
+                logger.error(f"Error processing payment link transaction: {e}", exc_info=True)
+                from utils.message_manager import send_and_save_message
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                
+                error_text = "❌ خطا در پردازش پرداخت\n\n"
+                error_text += "متأسفانه در پردازش تراکنش خطایی رخ داد.\n\n"
+                error_text += "لطفا:\n"
+                error_text += "• دوباره تلاش کنید\n"
+                error_text += "• یا با پشتیبانی تماس بگیرید\n\n"
+                error_text += "⚠️ توجه: در صورت کسر موجودی، مبلغ به حساب شما بازگردانده می‌شود."
+                
+                keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)
+                return True
         else:
-            # New user or no active account, show welcome
-            await self.show_welcome(update, context)
+            # Old format: treat as buy (backward compatibility)
+            from utils.message_manager import send_and_save_message
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            from utils.encryption import encrypt_state
+            
+            state = {
+                'action': 'buy_pers',
+                'step': 'enter_password',
+                'amount': amount,
+                'from_payment_link': True
+            }
+            encrypted_state = encrypt_state(state)
+            self.db.update_user_state(user_id, encrypted_state)
+            
+            buy_text = "🔗 لینک پرداخت\n\n"
+            buy_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+            buy_text += f"💰 مبلغ: {amount:,.2f} PERS\n\n"
+            buy_text += "برای شارژ حساب خود، لطفا رمز عبور ۸ رقمی خود را وارد کنید:\n\n"
+            buy_text += "⚠️ توجه: برای امنیت بیشتر، رمز عبور شما نمایش داده نمی‌شود."
+            
+            keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await send_and_save_message(context, update.effective_chat.id, buy_text, self.db, user_id, reply_markup=reply_markup)
+        
+        return True
     
-    async def show_agreement(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /start command"""
+        logger = logging.getLogger(__name__)
+        
+        try:
+            user_id = str(update.effective_user.id)
+            username = update.effective_user.username  # Get username from Telegram
+            
+            # Check if user is locked
+            is_locked, lock_message = self.lock_manager.check_lock(user_id)
+            if is_locked:
+                if update.message:
+                    await update.message.reply_text(lock_message)
+                elif update.callback_query:
+                    await update.callback_query.message.reply_text(lock_message)
+                else:
+                    # Fallback: send message directly
+                    chat_id = update.effective_chat.id
+                    await context.bot.send_message(chat_id=chat_id, text=lock_message)
+                return
+            
+            # Get or create user (and update username if available)
+            user = self.db.get_or_create_user(user_id, username)
+            
+            # Check for payment link parameter (deep link)
+            # Format: /start pay_{destination_account}_{amount}
+            # Log for debugging
+            logger.info(f"Start command received - user_id: {user_id}, args: {context.args}")
+            
+            if context.args and len(context.args) > 0 and context.args[0].startswith('pay_'):
+                # This is a payment link click
+                logger.info(f"Payment link detected: {context.args[0]}")
+                try:
+                    # Parse payment link using the utility function
+                    from utils.generators import parse_payment_link
+                    url = f"https://t.me/{context.bot.username}?start={context.args[0]}"
+                    is_payment_link, destination_account, amount, token = parse_payment_link(url)
+                    
+                    if not is_payment_link:
+                        raise ValueError("Invalid payment link format")
+                    
+                    # Process payment link using the extracted method
+                    logger.info(f"Calling handle_payment_link_processing - token: {token}, destination: {destination_account}, amount: {amount}")
+                    await self.handle_payment_link_processing(update, context, destination_account, amount, token)
+                    logger.info("Payment link processing completed")
+                    return
+                except (ValueError, IndexError) as e:
+                    # Invalid payment link format, continue to normal start flow
+                    logger.error(f"Error parsing payment link: {e}", exc_info=True)
+                    # Send error message to user but continue to normal start flow
+                    try:
+                        error_text = "❌ خطا در لینک پرداخت\n\nلینک پرداخت معتبر نیست. لطفا از لینک صحیح استفاده کنید."
+                        if update.message:
+                            await update.message.reply_text(error_text)
+                        else:
+                            chat_id = update.effective_chat.id
+                            await context.bot.send_message(chat_id=chat_id, text=error_text)
+                    except Exception as send_error:
+                        logger.error(f"Error sending error message: {send_error}", exc_info=True)
+                    # Continue to normal start flow (show agreement or menu)
+                except Exception as e:
+                    # Log any other errors
+                    logger.error(f"Unexpected error processing payment link: {e}", exc_info=True)
+                    # Send error message to user but continue to normal start flow
+                    try:
+                        error_text = "❌ خطا در پردازش لینک پرداخت\n\nلطفا دوباره تلاش کنید."
+                        if update.message:
+                            await update.message.reply_text(error_text)
+                        else:
+                            chat_id = update.effective_chat.id
+                            await context.bot.send_message(chat_id=chat_id, text=error_text)
+                    except Exception as send_error:
+                        logger.error(f"Error sending error message: {send_error}", exc_info=True)
+                    # Continue to normal start flow
+            
+            # Check if user has accepted agreement
+            if not self.db.has_accepted_agreement(user_id):
+                # Show agreement first
+                try:
+                    await self.show_agreement(update, context)
+                except Exception as e:
+                    # If show_agreement fails, send a fallback message
+                    logger.error(f"Error showing agreement: {e}", exc_info=True)
+                    chat_id = update.effective_chat.id
+                    error_text = "❌ خطا در نمایش موافقت‌نامه\n\nلطفا دوباره تلاش کنید: /start"
+                    try:
+                        if update.message:
+                            await update.message.reply_text(error_text)
+                        else:
+                            await context.bot.send_message(chat_id=chat_id, text=error_text)
+                    except Exception as send_error:
+                        logger.error(f"Error sending error message: {send_error}", exc_info=True)
+                return
+            
+            # Check if user has active account
+            active_account = self.db.get_active_account(user_id)
+            
+            if active_account:
+                # User has account, show main menu
+                try:
+                    await self.show_main_menu(update, context)
+                except Exception as e:
+                    logger.error(f"Error showing main menu: {e}", exc_info=True)
+                    # Fallback: send simple message
+                    chat_id = update.effective_chat.id
+                    error_text = "❌ خطا در نمایش منو\n\nلطفا دوباره تلاش کنید: /start"
+                    try:
+                        if update.message:
+                            await update.message.reply_text(error_text)
+                        else:
+                            await context.bot.send_message(chat_id=chat_id, text=error_text)
+                    except:
+                        pass
+            else:
+                # New user or no active account, show welcome
+                try:
+                    await self.show_welcome(update, context)
+                except Exception as e:
+                    logger.error(f"Error showing welcome: {e}", exc_info=True)
+                    # Fallback: send simple message
+                    chat_id = update.effective_chat.id
+                    error_text = "❌ خطا در نمایش پیام خوش‌آمدگویی\n\nلطفا دوباره تلاش کنید: /start"
+                    try:
+                        if update.message:
+                            await update.message.reply_text(error_text)
+                        else:
+                            await context.bot.send_message(chat_id=chat_id, text=error_text)
+                    except:
+                        pass
+        except Exception as e:
+            # Catch any unexpected errors and ensure a message is always sent
+            logger.error(f"Unexpected error in handle_start: {e}", exc_info=True)
+            chat_id = update.effective_chat.id
+            error_text = "❌ خطا در پردازش درخواست\n\nلطفا دوباره تلاش کنید: /start"
+            try:
+                if update.message:
+                    await update.message.reply_text(error_text)
+                else:
+                    await context.bot.send_message(chat_id=chat_id, text=error_text)
+            except Exception as send_error:
+                logger.error(f"Error sending error message: {send_error}", exc_info=True)
+    
+    async def show_agreement(self, update: Update, context: ContextTypes.DEFAULT_TYPE, from_payment_link: bool = False):
         """Show agreement/terms of service"""
+        user_id = str(update.effective_user.id)
+        
+        # Check if user came from payment link
+        if not from_payment_link:
+            encrypted_state = self.db.get_user_state(user_id)
+            if encrypted_state:
+                state = decrypt_state(encrypted_state)
+                from_payment_link = state.get('pending_payment_link', False)
+        
         agreement_text = """📋 موافقت‌نامه استفاده از ربات پرس بات
 
 با استفاده از این ربات، شما موافقت می‌کنید که:
@@ -208,9 +487,15 @@ class StartHandler:
 
 ⚠️ توجه: استفاده از این ربات به معنای پذیرش کامل این شرایط است.
 
-📄 فایل کامل تعهدنامه و شرایط استفاده از سامانه در زیر ارسال شده است. لطفا آن را مطالعه فرمایید.
-
-آیا موافقت‌نامه را می‌پذیرید؟"""
+📄 فایل کامل تعهدنامه و شرایط استفاده از سامانه در زیر ارسال شده است. لطفا آن را مطالعه فرمایید."""
+        
+        # Add payment link message if user came from payment link
+        if from_payment_link:
+            agreement_text += "\n\n" + "🔗 توجه:\n"
+            agreement_text += "شما از طریق لینک پرداخت وارد شده‌اید.\n"
+            agreement_text += "پس از پذیرش موافقت‌نامه، پردازش لینک پرداخت ادامه خواهد یافت."
+        
+        agreement_text += "\n\nآیا موافقت‌نامه را می‌پذیرید؟"
 
         # Get PDF file path
         project_root = os.path.dirname(os.path.dirname(__file__))
@@ -331,104 +616,14 @@ class StartHandler:
                 # User clicked payment link before accepting agreement
                 amount = state.get('payment_link_amount')
                 destination_account = state.get('payment_link_destination')
-                active_account = self.db.get_active_account(user_id)
+                token = state.get('payment_link_token')
                 
-                if not active_account:
-                    # User doesn't have account yet
-                    await self.show_welcome(update, context)
-                    return
+                # ✅ استفاده از همان تابع handle_payment_link_processing برای پردازش
+                # Clear pending state first
+                self.db.update_user_state(user_id, "")
                 
-                # Check if destination account exists
-                if destination_account:
-                    dest_account = self.db.get_account_by_number(destination_account)
-                    if not dest_account:
-                        from utils.message_manager import send_and_save_message
-                        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-                        
-                        error_text = "❌ خطا در لینک پرداخت\n\n"
-                        error_text += "شماره حساب مقصد در لینک پرداخت معتبر نیست."
-                        keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
-                        reply_markup = InlineKeyboardMarkup(keyboard)
-                        await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)
-                        return
-                    
-                    # Check if user is trying to send to themselves
-                    if destination_account == active_account.account_number:
-                        from utils.message_manager import send_and_save_message
-                        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-                        
-                        error_text = "⚠️ شما نمی‌توانید به خودتان پرس ارسال کنید."
-                        keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
-                        reply_markup = InlineKeyboardMarkup(keyboard)
-                        await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)
-                        return
-                    
-                    # Check balance before proceeding
-                    from utils.message_manager import send_and_save_message
-                    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-                    from utils.encryption import encrypt_state
-                    import config
-                    
-                    balance = float(active_account.balance)
-                    fee = min(amount * config.TRANSACTION_FEE_PERCENT, config.MAX_TRANSACTION_FEE)
-                    total_needed = amount + fee
-                    
-                    if balance < total_needed:
-                        error_text = f"❌ موجودی شما کافی نیست.\n\n"
-                        error_text += f"موجودی: {balance:,.2f} PERS\n"
-                        error_text += f"مبلغ مورد نیاز: {total_needed:,.2f} PERS (مبلغ + کارمزد)"
-                        keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
-                        reply_markup = InlineKeyboardMarkup(keyboard)
-                        await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)
-                        return
-                    
-                    # Start send process with destination and amount pre-filled
-                    
-                    state = {
-                        'action': 'send_pers',
-                        'step': 'enter_password',
-                        'destination': destination_account,
-                        'amount': amount,
-                        'fee': fee,
-                        'payment_link_amount': amount,
-                        'from_payment_link': True
-                    }
-                    encrypted_state = encrypt_state(state)
-                    self.db.update_user_state(user_id, encrypted_state)
-                    
-                    send_text = "🔗 لینک پرداخت\n\n"
-                    send_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
-                    send_text += f"💰 مبلغ: {amount:,.2f} PERS\n\n"
-                    send_text += "برای ارسال این مبلغ، لطفا رمز عبور ۸ رقمی خود را وارد کنید:\n\n"
-                    send_text += "⚠️ توجه: برای امنیت بیشتر، رمز عبور شما نمایش داده نمی‌شود."
-                    
-                    keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                    await send_and_save_message(context, update.effective_chat.id, send_text, self.db, user_id, reply_markup=reply_markup)
-                else:
-                    # Old format: start buy process with pre-filled amount (backward compatibility)
-                    from utils.message_manager import send_and_save_message
-                    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-                    from utils.encryption import encrypt_state
-                    
-                    state = {
-                        'action': 'buy_pers',
-                        'step': 'enter_password',
-                        'amount': amount,
-                        'from_payment_link': True
-                    }
-                    encrypted_state = encrypt_state(state)
-                    self.db.update_user_state(user_id, encrypted_state)
-                    
-                    buy_text = "🔗 لینک پرداخت\n\n"
-                    buy_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
-                    buy_text += f"💰 مبلغ: {amount:,.2f} PERS\n\n"
-                    buy_text += "برای شارژ حساب خود، لطفا رمز عبور ۸ رقمی خود را وارد کنید:\n\n"
-                    buy_text += "⚠️ توجه: برای امنیت بیشتر، رمز عبور شما نمایش داده نمی‌شود."
-                    
-                    keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                    await send_and_save_message(context, update.effective_chat.id, buy_text, self.db, user_id, reply_markup=reply_markup)
+                # Process payment link using the same method
+                await self.handle_payment_link_processing(update, context, destination_account, amount, token)
                 
                 # Clear the pending payment link state
                 return
@@ -499,6 +694,7 @@ class StartHandler:
         account = self.db.get_active_account(user_id)
         
         keyboard = [
+            [InlineKeyboardButton("🔗 ساخت لینک پرداخت", callback_data="create_payment_link")],
             [InlineKeyboardButton("💰 موجودی حساب", callback_data="balance")],
             [InlineKeyboardButton("🛒 خرید پرس", callback_data="buy_pers")],
             [InlineKeyboardButton("📤 ارسال پرس", callback_data="send_pers")],
@@ -516,7 +712,8 @@ class StartHandler:
             menu_text += f"💼 موجودی فعلی شما: {balance:,.2f} PERS\n\n"
         
         menu_text += "📌 گزینه‌های موجود:\n"
-        menu_text += "• 💰 موجودی حساب: مشاهده موجودی و ساخت لینک پرداخت\n"
+        menu_text += "• 🔗 ساخت لینک پرداخت: ساخت لینک پرداخت برای دریافت PERS از دیگران\n"
+        menu_text += "• 💰 موجودی حساب: مشاهده موجودی حساب\n"
         menu_text += "• 🛒 خرید پرس: خرید PERS با پرداخت آنلاین\n"
         menu_text += "• 📤 ارسال پرس: ارسال PERS به سایر کاربران\n"
         menu_text += "• 💸 فروش پرس: فروش PERS و دریافت تومان\n"

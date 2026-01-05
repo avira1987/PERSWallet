@@ -2,7 +2,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database.db_manager import DatabaseManager
 from utils.lock_manager import LockManager
-from utils.validators import validate_password
+from utils.validators import validate_password, normalize_persian_digits
 from utils.encryption import encrypt_state, decrypt_state
 from utils.message_manager import delete_previous_messages, send_and_save_message, edit_and_save_message
 import config
@@ -60,6 +60,9 @@ class ContactHandler:
         """Handle password input"""
         user_id = str(update.effective_user.id)
         password = update.message.text.strip()
+        
+        # Normalize Persian digits to English digits
+        password = normalize_persian_digits(password)
         
         # Check if user is locked
         is_locked, lock_message = self.lock_manager.check_lock(user_id)

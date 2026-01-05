@@ -2,23 +2,39 @@ import re
 from typing import Tuple
 
 
+def normalize_persian_digits(text: str) -> str:
+    """
+    Convert Persian/Farsi digits to English digits
+    Persian digits: ۰۱۲۳۴۵۶۷۸۹
+    English digits: 0123456789
+    """
+    persian_digits = '۰۱۲۳۴۵۶۷۸۹'
+    english_digits = '0123456789'
+    
+    # Create translation table
+    translation_table = str.maketrans(persian_digits, english_digits)
+    
+    # Translate Persian digits to English
+    return text.translate(translation_table)
+
+
 def validate_password(password: str) -> Tuple[bool, str]:
     """
-    Validate password: minimum 8 digits, only English numbers
+    Validate password: minimum 8 digits, only numbers (accepts Persian/Farsi digits)
     Returns: (is_valid, error_message)
     """
     if not password:
         return False, "رمز عبور نمی‌تواند خالی باشد."
     
+    # Normalize Persian digits to English digits
+    password = normalize_persian_digits(password)
+    
     if len(password) < 8:
         return False, "رمز عبور باید حداقل ۸ رقم باشد."
     
-    if not password.isdigit():
-        return False, "رمز عبور باید فقط شامل اعداد انگلیسی باشد."
-    
-    # Check if all digits are English (0-9)
+    # Check if all characters are digits (now normalized to English)
     if not re.match(r'^[0-9]+$', password):
-        return False, "رمز عبور باید فقط شامل اعداد انگلیسی باشد."
+        return False, "رمز عبور باید فقط شامل اعداد باشد."
     
     return True, ""
 

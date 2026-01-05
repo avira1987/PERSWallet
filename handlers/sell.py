@@ -2,7 +2,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database.db_manager import DatabaseManager
 from utils.lock_manager import LockManager
-from utils.validators import validate_amount, validate_sheba, validate_password
+from utils.validators import validate_amount, validate_sheba, validate_password, normalize_persian_digits
 from utils.encryption import encrypt_state, decrypt_state
 from utils.message_manager import delete_previous_messages, send_and_save_message, edit_and_save_message
 import config
@@ -14,7 +14,7 @@ class SellHandler:
         self.lock_manager = lock_manager
     
     async def start_sell(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Start sell PERS process"""
+        """Start sell PERS process - first ask for password"""
         user_id = str(update.effective_user.id)
         
         # Check if user is locked
@@ -35,35 +35,26 @@ class SellHandler:
                 await update.callback_query.edit_message_text(error_text, reply_markup=reply_markup)
             return
         
-        # Save state
+        # Save state to request password first
         state = {
             'action': 'sell_pers',
-            'step': 'enter_amount'
+            'step': 'enter_password'
         }
         encrypted_state = encrypt_state(state)
         self.db.update_user_state(user_id, encrypted_state)
         
-        # Request amount
-        balance = float(account.balance)
-        # User can sell up to 99% of balance, 1% must remain after deducting amount + commission
-        # max_sell * (1 + commission_rate) <= balance * 0.99
-        max_sell = (balance * 0.99) / (1 + config.SELL_FEE_PERCENT)
-        
-        amount_text = "💸 فروش PERS\n\n"
-        amount_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
-        amount_text += f"💼 موجودی فعلی: {balance:,.2f} PERS\n"
-        amount_text += f"📊 حداکثر مقدار فروش: {max_sell:,.2f} PERS\n"
-        amount_text += f"💡 حداقل موجودی باقیمانده: {balance * 0.01:,.2f} PERS (1%)\n\n"
-        amount_text += "لطفا مقدار مورد نظر را برای فروش وارد کنید (به PERS):\n\n"
-        amount_text += "⚠️ توجه: پس از فروش، مبلغ به حساب بانکی شما واریز می‌شود."
+        # Request password
+        password_text = "💸 فروش PERS\n\n"
+        password_text += "برای فروش PERS، لطفا رمز عبور ۸ رقمی خود را وارد کنید:\n\n"
+        password_text += "⚠️ توجه: برای امنیت بیشتر، رمز عبور شما نمایش داده نمی‌شود."
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         if update.callback_query:
-            await edit_and_save_message(update, context, amount_text, self.db, user_id, reply_markup=reply_markup)
+            await edit_and_save_message(update, context, password_text, self.db, user_id, reply_markup=reply_markup)
         else:
-            await send_and_save_message(context, update.effective_chat.id, amount_text, self.db, user_id, reply_markup=reply_markup)
+            await send_and_save_message(context, update.effective_chat.id, password_text, self.db, user_id, reply_markup=reply_markup)
     
     async def handle_amount_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle amount input"""
@@ -211,7 +202,7 @@ class SellHandler:
         await send_and_save_message(context, update.effective_chat.id, confirm_text, self.db, user_id, reply_markup=reply_markup)
     
     async def handle_confirm_sell(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle sell confirmation"""
+        """Handle sell confirmation - password already verified, process sell"""
         user_id = str(update.effective_user.id)
         
         # Get state
@@ -227,24 +218,16 @@ class SellHandler:
         if update.callback_query:
             await delete_previous_messages(update, context, self.db, user_id, delete_user_message=False)
         
-        # Update state to request password
-        state['step'] = 'enter_password'
-        encrypted_state = encrypt_state(state)
-        self.db.update_user_state(user_id, encrypted_state)
-        
-        password_text = "🔐 تایید هویت\n\n"
-        password_text += "لطفا رمز عبور ۸ رقمی خود را وارد کنید:\n\n"
-        password_text += "⚠️ توجه: برای امنیت بیشتر، رمز عبور شما نمایش داده نمی‌شود."
-        
-        keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await send_and_save_message(context, update.effective_chat.id, password_text, self.db, user_id, reply_markup=reply_markup)
+        # Password already verified, process sell directly
+        await self.process_sell_after_password(update, context)
     
     async def handle_password_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle password input and process sell"""
+        """Handle password input - after verification, request amount or process sell"""
         user_id = str(update.effective_user.id)
         password = update.message.text.strip()
+        
+        # Normalize Persian digits to English digits
+        password = normalize_persian_digits(password)
         
         # Check if user is locked
         is_locked, lock_message = self.lock_manager.check_lock(user_id)
@@ -292,7 +275,53 @@ class SellHandler:
             self.db.update_user_state(user_id, encrypted_state)
             return
         
-        # Password correct, delete previous messages and process sell
+        # Password correct, check if amount is already set (from confirm step)
+        amount = state.get('amount', 0)
+        if amount > 0:
+            # Amount already set, process sell
+            await delete_previous_messages(update, context, self.db, user_id, delete_user_message=True)
+            await self.process_sell_after_password(update, context)
+        else:
+            # Request amount
+            await delete_previous_messages(update, context, self.db, user_id, delete_user_message=True)
+            
+            # Update state to request amount
+            state['step'] = 'enter_amount'
+            encrypted_state = encrypt_state(state)
+            self.db.update_user_state(user_id, encrypted_state)
+            
+            balance = float(account.balance)
+            # User can sell up to 99% of balance, 1% must remain after deducting amount + commission
+            # max_sell * (1 + commission_rate) <= balance * 0.99
+            max_sell = (balance * 0.99) / (1 + config.SELL_FEE_PERCENT)
+            
+            amount_text = "💸 فروش PERS\n\n"
+            amount_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+            amount_text += f"💼 موجودی فعلی: {balance:,.2f} PERS\n"
+            amount_text += f"📊 حداکثر مقدار فروش: {max_sell:,.2f} PERS\n"
+            amount_text += f"💡 حداقل موجودی باقیمانده: {balance * 0.01:,.2f} PERS (1%)\n\n"
+            amount_text += "لطفا مقدار مورد نظر را برای فروش وارد کنید (به PERS):\n\n"
+            amount_text += "⚠️ توجه: پس از فروش، مبلغ به حساب بانکی شما واریز می‌شود."
+            
+            keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await send_and_save_message(context, update.effective_chat.id, amount_text, self.db, user_id, reply_markup=reply_markup)
+    
+    async def process_sell_after_password(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Process sell after password verification"""
+        user_id = str(update.effective_user.id)
+        
+        # Get state
+        encrypted_state = self.db.get_user_state(user_id)
+        state = decrypt_state(encrypted_state)
+        
+        # Get account
+        account = self.db.get_active_account(user_id)
+        if not account:
+            await update.message.reply_text("اکانت شما یافت نشد.")
+            return
+        
         await delete_previous_messages(update, context, self.db, user_id, delete_user_message=True)
         
         amount = state.get('amount', 0)

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List
 from decimal import Decimal
 import config
-from database.models import Base, User, Account, Transaction, Lock, WithdrawalRequest, TransactionLog
+from database.models import Base, User, Account, Transaction, Lock, WithdrawalRequest, TransactionLog, PaymentLink
 from utils.encryption import hash_password, verify_password, hash_account_number, verify_account_number
 import logging
 import sys
@@ -53,6 +53,8 @@ class DatabaseManager:
                 self._migrate_withdrawal_requests_table()
                 # Migrate: Create transaction_logs table if it doesn't exist
                 self._migrate_transaction_logs_table()
+                # Migrate: Create payment_links table if it doesn't exist
+                self._migrate_payment_links_table()
                 
                 logger.info("PostgreSQL connection successful!")
                 return
@@ -90,6 +92,8 @@ class DatabaseManager:
             self._migrate_username_column()
             # Migrate: Create withdrawal_requests table if it doesn't exist
             self._migrate_withdrawal_requests_table()
+            # Migrate: Create payment_links table if it doesn't exist
+            self._migrate_payment_links_table()
             
             logger.info("Database connection successful!")
         except Exception as e:
@@ -244,6 +248,22 @@ class DatabaseManager:
                 # Create the table using SQLAlchemy
                 TransactionLog.__table__.create(self.engine, checkfirst=True)
                 logger.info("Migration completed: transaction_logs table created")
+        except Exception as e:
+            logger.warning(f"Migration warning (may already exist): {e}")
+    
+    def _migrate_payment_links_table(self):
+        """Migrate: Create payment_links table if it doesn't exist"""
+        try:
+            from sqlalchemy import inspect
+
+            inspector = inspect(self.engine)
+            tables = inspector.get_table_names()
+
+            if 'payment_links' not in tables:
+                logger.info("Migrating: Creating payment_links table...")
+                # Create the table using SQLAlchemy
+                PaymentLink.__table__.create(self.engine, checkfirst=True)
+                logger.info("Migration completed: payment_links table created")
         except Exception as e:
             logger.warning(f"Migration warning (may already exist): {e}")
     
@@ -782,6 +802,66 @@ class DatabaseManager:
         except SQLAlchemyError as e:
             session.rollback()
             logger.error(f"Error completing withdrawal request: {e}")
+            raise e
+        finally:
+            session.close()
+    
+    # Payment Link operations
+    def create_payment_link(self, token: str, destination_account: Optional[str], amount: float, created_by: str) -> PaymentLink:
+        """Create a new payment link"""
+        session = self.get_session()
+        try:
+            payment_link = PaymentLink(
+                token=token,
+                destination_account=destination_account,
+                amount=Decimal(str(amount)),
+                created_by=str(created_by),
+                is_used=False,
+                created_at=datetime.utcnow()
+            )
+            session.add(payment_link)
+            session.commit()
+            session.refresh(payment_link)
+            return payment_link
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error creating payment link: {e}")
+            raise e
+        finally:
+            session.close()
+    
+    def get_payment_link(self, token: str) -> Optional[PaymentLink]:
+        """Get a payment link by token"""
+        session = self.get_session()
+        try:
+            return session.query(PaymentLink).filter(PaymentLink.token == token).first()
+        finally:
+            session.close()
+    
+    def is_payment_link_used(self, token: str) -> bool:
+        """Check if a payment link has been used"""
+        payment_link = self.get_payment_link(token)
+        return payment_link.is_used if payment_link else True  # If link doesn't exist, consider it as used
+    
+    def mark_payment_link_as_used(self, token: str, used_by: str) -> bool:
+        """Mark a payment link as used"""
+        session = self.get_session()
+        try:
+            payment_link = session.query(PaymentLink).filter(PaymentLink.token == token).first()
+            if not payment_link:
+                return False
+            
+            if payment_link.is_used:
+                return False  # Already used
+            
+            payment_link.is_used = True
+            payment_link.used_at = datetime.utcnow()
+            payment_link.used_by = str(used_by)
+            session.commit()
+            return True
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error marking payment link as used: {e}")
             raise e
         finally:
             session.close()

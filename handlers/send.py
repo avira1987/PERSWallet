@@ -2,7 +2,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database.db_manager import DatabaseManager
 from utils.lock_manager import LockManager
-from utils.validators import validate_account_number, validate_amount, validate_password
+from utils.validators import validate_account_number, validate_amount, validate_password, normalize_persian_digits
 from utils.encryption import encrypt_state, decrypt_state
 from utils.message_manager import delete_previous_messages, send_and_save_message, edit_and_save_message
 import config
@@ -17,7 +17,7 @@ class SendHandler:
         self.lock_manager = lock_manager
     
     async def start_send(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Start send PERS process"""
+        """Start send PERS process - first ask for password"""
         user_id = str(update.effective_user.id)
         
         # Check if user is locked
@@ -38,33 +38,27 @@ class SendHandler:
                 await update.callback_query.edit_message_text(error_text, reply_markup=reply_markup)
             return
         
-        # Save state
+        # Save state to request password first
         state = {
             'action': 'send_pers',
-            'step': 'enter_destination',
+            'step': 'enter_password',
             'destination_attempts': 0
         }
         encrypted_state = encrypt_state(state)
         self.db.update_user_state(user_id, encrypted_state)
         
-        # Request destination account
-        balance = float(account.balance)
-        dest_text = "📤 ارسال PERS\n\n"
-        dest_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
-        dest_text += f"💼 موجودی فعلی: {balance:,.2f} PERS\n\n"
-        dest_text += "لطفا شماره اکانت مقصد را وارد کنید (۱۶ رقم):\n\n"
-        dest_text += "⚠️ توجه مهم:\n"
-        dest_text += "• شماره حساب را با دقت وارد کنید\n"
-        dest_text += "• پس از ارسال، امکان بازگشت وجود ندارد\n"
-        dest_text += "• کارمزد تراکنش از موجودی شما کسر می‌شود"
+        # Request password
+        password_text = "📤 ارسال PERS\n\n"
+        password_text += "برای ارسال PERS، لطفا رمز عبور ۸ رقمی خود را وارد کنید:\n\n"
+        password_text += "⚠️ توجه: برای امنیت بیشتر، رمز عبور شما نمایش داده نمی‌شود."
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         if update.callback_query:
-            await edit_and_save_message(update, context, dest_text, self.db, user_id, reply_markup=reply_markup)
+            await edit_and_save_message(update, context, password_text, self.db, user_id, reply_markup=reply_markup)
         else:
-            await send_and_save_message(context, update.effective_chat.id, dest_text, self.db, user_id, reply_markup=reply_markup)
+            await send_and_save_message(context, update.effective_chat.id, password_text, self.db, user_id, reply_markup=reply_markup)
     
     async def handle_destination_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle destination account input"""
@@ -271,9 +265,12 @@ class SendHandler:
         await send_and_save_message(context, update.effective_chat.id, password_text, self.db, user_id, reply_markup=reply_markup)
     
     async def handle_password_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle password input and process transaction"""
+        """Handle password input - after verification, request destination or process transaction"""
         user_id = str(update.effective_user.id)
         password = update.message.text.strip()
+        
+        # Normalize Persian digits to English digits
+        password = normalize_persian_digits(password)
         
         # Check if user is locked
         is_locked, lock_message = self.lock_manager.check_lock(user_id)
@@ -321,7 +318,52 @@ class SendHandler:
             self.db.update_user_state(user_id, encrypted_state)
             return
         
-        # Password correct, delete previous messages and process transaction
+        # Password correct, check if destination and amount are already set (from payment link)
+        destination = state.get('destination')
+        amount = state.get('amount', 0)
+        
+        if destination and amount > 0:
+            # Destination and amount already set (from payment link), process transaction
+            await delete_previous_messages(update, context, self.db, user_id, delete_user_message=True)
+            await self.process_transaction_after_password(update, context)
+        else:
+            # Request destination
+            await delete_previous_messages(update, context, self.db, user_id, delete_user_message=True)
+            
+            # Update state to request destination
+            state['step'] = 'enter_destination'
+            encrypted_state = encrypt_state(state)
+            self.db.update_user_state(user_id, encrypted_state)
+            
+            balance = float(account.balance)
+            dest_text = "📤 ارسال PERS\n\n"
+            dest_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+            dest_text += f"💼 موجودی فعلی: {balance:,.2f} PERS\n\n"
+            dest_text += "لطفا شماره اکانت مقصد را وارد کنید (۱۶ رقم):\n\n"
+            dest_text += "⚠️ توجه مهم:\n"
+            dest_text += "• شماره حساب را با دقت وارد کنید\n"
+            dest_text += "• پس از ارسال، امکان بازگشت وجود ندارد\n"
+            dest_text += "• کارمزد تراکنش از موجودی شما کسر می‌شود"
+            
+            keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await send_and_save_message(context, update.effective_chat.id, dest_text, self.db, user_id, reply_markup=reply_markup)
+    
+    async def process_transaction_after_password(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Process transaction after password verification"""
+        user_id = str(update.effective_user.id)
+        
+        # Get account
+        account = self.db.get_active_account(user_id)
+        if not account:
+            await update.message.reply_text("اکانت شما یافت نشد.")
+            return
+        
+        # Get state
+        encrypted_state = self.db.get_user_state(user_id)
+        state = decrypt_state(encrypted_state)
+        
         await delete_previous_messages(update, context, self.db, user_id, delete_user_message=True)
         
         amount = state.get('amount', 0)

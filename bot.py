@@ -120,6 +120,19 @@ class BalanceBot:
             await update.message.reply_text(lock_message)
             return
         
+        # Check for payment link in message text (for QR code scanning or direct URL pasting)
+        message_text = update.message.text
+        if message_text:
+            from utils.generators import parse_payment_link
+            is_payment_link, destination_account, amount, token = parse_payment_link(message_text)
+            
+            if is_payment_link:
+                # Payment link detected in text message
+                await self.start_handler.handle_payment_link_processing(
+                    update, context, destination_account, amount, token
+                )
+                return
+        
         # Check agreement acceptance
         if not self.db.has_accepted_agreement(user_id):
             # Handle /start command even without agreement
@@ -147,28 +160,33 @@ class BalanceBot:
                 await self.account_handler.handle_recover_account_number(update, context)
             elif step == 'enter_password':
                 await self.account_handler.handle_recover_password(update, context)
+        elif action == 'balance':
+            if step == 'enter_password':
+                await self.balance_handler.handle_password_input(update, context)
         elif action == 'create_payment_link':
-            if step == 'enter_amount':
+            if step == 'enter_password':
+                await self.balance_handler.handle_payment_link_password_input(update, context)
+            elif step == 'enter_amount':
                 await self.balance_handler.handle_payment_link_amount(update, context)
         elif action == 'buy_pers':
-            if step == 'enter_amount':
-                await self.buy_handler.handle_amount_input(update, context)
-            elif step == 'enter_password':
+            if step == 'enter_password':
                 await self.buy_handler.handle_password_input(update, context)
+            elif step == 'enter_amount':
+                await self.buy_handler.handle_amount_input(update, context)
         elif action == 'send_pers':
-            if step == 'enter_destination':
+            if step == 'enter_password':
+                await self.send_handler.handle_password_input(update, context)
+            elif step == 'enter_destination':
                 await self.send_handler.handle_destination_input(update, context)
             elif step == 'enter_amount':
                 await self.send_handler.handle_amount_input(update, context)
-            elif step == 'enter_password':
-                await self.send_handler.handle_password_input(update, context)
         elif action == 'sell_pers':
-            if step == 'enter_amount':
+            if step == 'enter_password':
+                await self.sell_handler.handle_password_input(update, context)
+            elif step == 'enter_amount':
                 await self.sell_handler.handle_amount_input(update, context)
             elif step == 'enter_sheba':
                 await self.sell_handler.handle_sheba_input(update, context)
-            elif step == 'enter_password':
-                await self.sell_handler.handle_password_input(update, context)
         elif action == 'transactions':
             if step == 'enter_password':
                 await self.transactions_handler.handle_password_input(update, context)

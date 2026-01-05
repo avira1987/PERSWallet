@@ -32,7 +32,16 @@ class DatabaseManager:
         # If PostgreSQL is configured but not available, fallback to SQLite
         if db_url.startswith('postgresql://'):
             try:
-                logger.info(f"Attempting to connect to PostgreSQL: {db_url.split('@')[-1] if '@' in db_url else 'database'}")
+                # Don't log database URL to avoid exposing credentials
+                # Extract only host and database name for logging
+                if '@' in db_url:
+                    db_part = db_url.split('@')[-1]
+                    # Remove query parameters if any
+                    if '?' in db_part:
+                        db_part = db_part.split('?')[0]
+                    logger.info(f"Attempting to connect to PostgreSQL: {db_part}")
+                else:
+                    logger.info("Attempting to connect to PostgreSQL database")
                 self.engine = create_engine(db_url, echo=False)
                 self.SessionLocal = sessionmaker(bind=self.engine)
                 
@@ -422,16 +431,31 @@ class DatabaseManager:
             session.close()
     
     def update_account_balance(self, account_number: str, amount: float):
+        """
+        Update account balance atomically to prevent race conditions
+        Uses database-level locking for thread-safety
+        """
         session = self.get_session()
         try:
-            account = session.query(Account).filter(Account.account_number == account_number).first()
+            # Use select_for_update to lock the row during transaction
+            if 'sqlite' in str(self.engine.url):
+                # SQLite doesn't support SELECT FOR UPDATE well, use transaction isolation
+                account = session.query(Account).filter(Account.account_number == account_number).first()
+            else:
+                # PostgreSQL: Use SELECT FOR UPDATE to lock the row
+                account = session.query(Account).filter(Account.account_number == account_number).with_for_update().first()
+            
             if account:
                 # Convert amount to Decimal to match database type
                 amount_decimal = Decimal(str(amount))
                 account.balance = Decimal(str(account.balance)) + amount_decimal
                 session.commit()
+            else:
+                session.rollback()
+                raise ValueError(f"Account {account_number} not found")
         except SQLAlchemyError as e:
             session.rollback()
+            logger.error(f"Error updating account balance: {e}")
             raise e
         finally:
             session.close()

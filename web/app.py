@@ -1,8 +1,14 @@
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash, abort
+from flask_login import login_user, logout_user, login_required, current_user
+from flask_wtf.csrf import CSRFProtect, generate_csrf
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from datetime import datetime, timedelta
+from functools import wraps
 import os
 import sys
 import json
+import logging
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -11,6 +17,7 @@ from database.db_manager import DatabaseManager
 from database.models import User, Account, Transaction, Lock, WithdrawalRequest
 import config
 from web.utils import format_number, format_date, calculate_stats
+from web.auth import login_manager, WebUser
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 
@@ -20,10 +27,77 @@ TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
 
 app = Flask(__name__, template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
-app.secret_key = os.getenv('WEB_SECRET_KEY', 'change-this-secret-key-in-production-12345')
+
+# Security: Use secret key from config (will fail if not set)
+app.secret_key = config.WEB_SECRET_KEY if hasattr(config, 'WEB_SECRET_KEY') else os.getenv('WEB_SECRET_KEY', '')
+
+# CSRF Protection
+csrf = CSRFProtect(app)
+
+# Rate Limiting
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
 
 # Initialize database
 db_manager = DatabaseManager()
+
+# Setup Flask-Login
+login_manager.init_app(app)
+login_manager.db_manager = db_manager
+
+# Set db_manager for user loader
+from web.auth import load_user as auth_load_user
+auth_load_user.db_manager = db_manager
+
+logger = logging.getLogger(__name__)
+
+
+def admin_required(f):
+    """Decorator to require admin access"""
+    @wraps(f)
+    @login_required
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_admin:
+            abort(403)  # Forbidden
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Login page - simple authentication using admin user_id"""
+    if request.method == 'POST':
+        user_id = request.form.get('user_id', '').strip()
+        
+        if not user_id:
+            flash('لطفا شناسه کاربری را وارد کنید.', 'error')
+            return render_template('login.html'), 401
+        
+        # Check if user exists and is admin
+        if db_manager.is_admin(user_id):
+            user = WebUser.get(user_id, db_manager)
+            if user:
+                login_user(user, remember=True)
+                next_page = request.args.get('next')
+                return redirect(next_page) if next_page else redirect(url_for('dashboard'))
+        
+        flash('شناسه کاربری یا سطح دسترسی نامعتبر است.', 'error')
+        return render_template('login.html'), 401
+    
+    return render_template('login.html')
+
+
+@app.route('/logout')
+@login_required
+def logout():
+    """Logout user"""
+    logout_user()
+    flash('با موفقیت خارج شدید.', 'info')
+    return redirect(url_for('login'))
 
 
 @app.route('/')
@@ -33,19 +107,23 @@ def index():
 
 
 @app.route('/dashboard')
+@login_required
+@admin_required
 def dashboard():
     """Dashboard with statistics"""
     try:
         stats = calculate_stats(db_manager)
         return render_template('dashboard.html', stats=stats)
     except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Error in dashboard route: {e}", exc_info=True)
-        return f"خطا در بارگذاری داشبورد: {str(e)}", 500
+        flash('خطا در بارگذاری داشبورد. لطفا دوباره تلاش کنید.', 'error')
+        return render_template('dashboard.html', stats={}), 500
 
 
 @app.route('/api/stats')
+@login_required
+@admin_required
+@limiter.limit("30 per minute")
 def api_stats():
     """API endpoint for statistics"""
     stats = calculate_stats(db_manager)
@@ -53,12 +131,17 @@ def api_stats():
 
 
 @app.route('/users')
+@login_required
+@admin_required
 def users():
     """Users management page"""
     return render_template('users.html')
 
 
 @app.route('/api/users')
+@login_required
+@admin_required
+@limiter.limit("60 per minute")
 def api_users():
     """API endpoint for users list - optimized with joins"""
     db_session = db_manager.get_session()
@@ -109,6 +192,9 @@ def api_users():
 
 
 @app.route('/api/users/<user_id>/lock', methods=['POST'])
+@login_required
+@admin_required
+@limiter.limit("20 per minute")
 def api_lock_user(user_id):
     """Lock a user"""
     reason = request.json.get('reason', 'قفل دستی توسط ادمین')
@@ -117,6 +203,9 @@ def api_lock_user(user_id):
 
 
 @app.route('/api/users/<user_id>/unlock', methods=['POST'])
+@login_required
+@admin_required
+@limiter.limit("20 per minute")
 def api_unlock_user(user_id):
     """Unlock a user"""
     db_manager.unlock_user(user_id)
@@ -124,6 +213,9 @@ def api_unlock_user(user_id):
 
 
 @app.route('/api/users/<user_id>/delete', methods=['DELETE'])
+@login_required
+@admin_required
+@limiter.limit("10 per minute")
 def api_delete_user(user_id):
     """Delete a user"""
     try:
@@ -137,6 +229,9 @@ def api_delete_user(user_id):
 
 
 @app.route('/api/users/<user_id>/admin', methods=['POST'])
+@login_required
+@admin_required
+@limiter.limit("5 per minute")
 def api_set_admin_status(user_id):
     """Set admin status for a user"""
     try:
@@ -153,6 +248,9 @@ def api_set_admin_status(user_id):
 
 
 @app.route('/api/users/<user_id>')
+@login_required
+@admin_required
+@limiter.limit("60 per minute")
 def api_user_detail(user_id):
     """Get user details - optimized"""
     db_session = db_manager.get_session()
@@ -223,12 +321,17 @@ def api_user_detail(user_id):
 
 
 @app.route('/accounts')
+@login_required
+@admin_required
 def accounts():
     """Accounts management page"""
     return render_template('accounts.html')
 
 
 @app.route('/api/accounts')
+@login_required
+@admin_required
+@limiter.limit("60 per minute")
 def api_accounts():
     """API endpoint for accounts list - optimized (removed unnecessary transaction count)"""
     db_session = db_manager.get_session()
@@ -264,6 +367,9 @@ def api_accounts():
 
 
 @app.route('/api/accounts/<account_number>/toggle', methods=['POST'])
+@login_required
+@admin_required
+@limiter.limit("30 per minute")
 def api_toggle_account(account_number):
     """Activate/Deactivate an account"""
     session = db_manager.get_session()
@@ -285,6 +391,9 @@ def api_toggle_account(account_number):
 
 
 @app.route('/api/accounts/<account_number>/balance', methods=['POST'])
+@login_required
+@admin_required
+@limiter.limit("30 per minute")
 def api_update_account_balance(account_number):
     """Update account balance (increase/decrease)"""
     try:
@@ -307,6 +416,9 @@ def api_update_account_balance(account_number):
 
 
 @app.route('/api/accounts/<account_number>/reset-password', methods=['POST'])
+@login_required
+@admin_required
+@limiter.limit("10 per minute")
 def api_reset_account_password(account_number):
     """Reset account password"""
     try:
@@ -326,24 +438,33 @@ def api_reset_account_password(account_number):
 
 
 @app.route('/transactions')
+@login_required
+@admin_required
 def transactions():
     """Transactions management page"""
     return render_template('transactions.html')
 
 
 @app.route('/tutorial')
+@login_required
+@admin_required
 def tutorial():
     """Tutorial page for using the Telegram bot"""
     return render_template('tutorial.html')
 
 
 @app.route('/withdrawals')
+@login_required
+@admin_required
 def withdrawals():
     """Withdrawal requests management page"""
     return render_template('withdrawals.html')
 
 
 @app.route('/api/withdrawals')
+@login_required
+@admin_required
+@limiter.limit("60 per minute")
 def api_withdrawals():
     """API endpoint for withdrawal requests list"""
     session = db_manager.get_session()
@@ -369,15 +490,16 @@ def api_withdrawals():
         
         return jsonify({'withdrawals': result})
     except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Error in api_withdrawals: {e}", exc_info=True)
-        return jsonify({'error': 'خطا در بارگذاری درخواست‌های واریز', 'details': str(e)}), 500
+        return jsonify({'error': 'خطا در بارگذاری درخواست‌های واریز'}), 500
     finally:
         session.close()
 
 
 @app.route('/api/withdrawals/<int:request_id>/confirm', methods=['POST'])
+@login_required
+@admin_required
+@limiter.limit("20 per minute")
 def api_confirm_withdrawal(request_id):
     """Confirm a withdrawal request and send confirmation message to user"""
     try:
@@ -390,7 +512,7 @@ def api_confirm_withdrawal(request_id):
             return jsonify({'error': 'این درخواست قبلا پردازش شده است'}), 400
         
         # Confirm the withdrawal
-        confirmed_by = 'admin'  # You can get this from session if you have admin login
+        confirmed_by = current_user.id if current_user.is_authenticated else 'admin'
         success = db_manager.confirm_withdrawal_request(request_id, confirmed_by)
         
         if not success:
@@ -403,8 +525,6 @@ def api_confirm_withdrawal(request_id):
                 message=create_withdrawal_confirmation_message(withdrawal)
             )
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"Error sending Telegram message: {e}", exc_info=True)
             # Don't fail the request if message sending fails
         
@@ -413,10 +533,8 @@ def api_confirm_withdrawal(request_id):
         
         return jsonify({'success': True, 'message': 'درخواست با موفقیت تایید شد و پیام به کاربر ارسال شد'})
     except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Error in api_confirm_withdrawal: {e}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'خطا در پردازش درخواست'}), 500
 
 
 def send_telegram_message(user_id: str, message: str):
@@ -459,6 +577,9 @@ def create_withdrawal_confirmation_message(withdrawal: WithdrawalRequest) -> str
 
 
 @app.route('/api/transactions')
+@login_required
+@admin_required
+@limiter.limit("60 per minute")
 def api_transactions():
     """API endpoint for transactions list"""
     session = db_manager.get_session()

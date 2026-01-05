@@ -11,26 +11,40 @@ import config
 
 def get_encryption_key() -> bytes:
     """
-    Get or generate encryption key from config
+    Get encryption key from config
     Fernet requires a URL-safe base64-encoded 32-byte key
     """
     key = config.ENCRYPTION_KEY
     if isinstance(key, str):
         key = key.encode()
     
-    if len(key) != 32:
-        # If key is not 32 bytes, derive it using PBKDF2
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=b'balancebot_salt',
-            iterations=100000,
-            backend=default_backend()
-        )
-        key = base64.urlsafe_b64encode(kdf.derive(key))
-    else:
-        # Encode to base64
-        key = base64.urlsafe_b64encode(key)
+    # For Fernet, we need exactly 32 bytes
+    # If key is provided as base64 string, decode it first
+    try:
+        # Try to decode as base64 (if user provided base64 encoded key)
+        decoded = base64.urlsafe_b64decode(key + b'=' * (4 - len(key) % 4))
+        if len(decoded) == 32:
+            key = decoded
+    except:
+        pass
+    
+    # If key is exactly 32 bytes, use it directly
+    if len(key) == 32:
+        return base64.urlsafe_b64encode(key)
+    
+    # Otherwise, derive 32 bytes from the provided key
+    # Generate a unique salt per installation (from key itself)
+    import hashlib
+    salt = hashlib.sha256(key + b'balancebot_encryption_salt').digest()[:16]
+    
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100000,
+        backend=default_backend()
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(key))
     
     return key
 

@@ -18,7 +18,25 @@ SUPPORT_CHAT_ID = int(os.getenv('SUPPORT_CHAT_ID', 0)) if os.getenv('SUPPORT_CHA
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///balancebot.db')
 
 # Encryption Configuration
-ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY', '').encode() if os.getenv('ENCRYPTION_KEY') else b'default_key_change_in_production_32bytes!!'
+# ENCRYPTION_KEY must be set in environment variables for production
+# Generate a secure key: python -c "import secrets; print(secrets.token_urlsafe(32))"
+ENCRYPTION_KEY_ENV = os.getenv('ENCRYPTION_KEY', '')
+if not ENCRYPTION_KEY_ENV:
+    import sys
+    print("ERROR: ENCRYPTION_KEY environment variable is required!")
+    print("Please set ENCRYPTION_KEY in your .env file.")
+    print("Generate a secure key using: python -c \"import secrets; print(secrets.token_urlsafe(32))\"")
+    sys.exit(1)
+ENCRYPTION_KEY = ENCRYPTION_KEY_ENV.encode() if ENCRYPTION_KEY_ENV else b''
+
+# Web Configuration
+WEB_SECRET_KEY = os.getenv('WEB_SECRET_KEY', '')
+if not WEB_SECRET_KEY:
+    import sys
+    print("ERROR: WEB_SECRET_KEY environment variable is required for web interface!")
+    print("Please set WEB_SECRET_KEY in your .env file.")
+    print("Generate a secure key using: python -c \"import secrets; print(secrets.token_urlsafe(32))\"")
+    sys.exit(1)
 
 # Application Constants
 PERS_TO_TOMAN = 1000  # 1 PERS = 1000 Toman = 10000 Rial

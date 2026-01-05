@@ -21,6 +21,7 @@ def normalize_persian_digits(text: str) -> str:
 def validate_password(password: str) -> Tuple[bool, str]:
     """
     Validate password: minimum 8 digits, only numbers (accepts Persian/Farsi digits)
+    Note: For better security, consider using a stronger password policy in future versions
     Returns: (is_valid, error_message)
     """
     if not password:
@@ -31,6 +32,9 @@ def validate_password(password: str) -> Tuple[bool, str]:
     
     if len(password) < 8:
         return False, "رمز عبور باید حداقل ۸ رقم باشد."
+    
+    if len(password) > 128:
+        return False, "رمز عبور نباید بیشتر از ۱۲۸ کاراکتر باشد."
     
     # Check if all characters are digits (now normalized to English)
     if not re.match(r'^[0-9]+$', password):

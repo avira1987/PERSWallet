@@ -115,8 +115,24 @@ def run_bot():
 def run_web():
     """Run the Flask web application"""
     try:
-        # Import web app
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        # Ensure .env is loaded from the correct directory
+        from dotenv import load_dotenv
+        
+        # Get the directory where run_all.py is located
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        env_path = os.path.join(base_dir, '.env')
+        
+        # Load .env file explicitly
+        if os.path.exists(env_path):
+            load_dotenv(env_path)
+            logger.info(f"Loaded .env from: {env_path}")
+        else:
+            logger.warning(f".env file not found at: {env_path}")
+            # Try default location
+            load_dotenv()
+        
+        # Import web app AFTER loading .env
+        sys.path.insert(0, base_dir)
         from web.app import app
         
         global web_app
@@ -130,16 +146,22 @@ def run_web():
         print("="*60)
         print("\nAccess panel at:")
         print("  http://localhost:5000")
-        print("\nLogin:")
-        print("  Username: admin")
-        admin_password = os.getenv('ADMIN_PASSWORD', 'admin123')
-        print(f"  Password: {admin_password}")
-        print("  (from ADMIN_PASSWORD in .env)")
         print("\n" + "="*60 + "\n")
+        
+        # Debug: Check if WEB_SECRET_KEY is loaded
+        web_secret = os.getenv('WEB_SECRET_KEY', '')
+        if web_secret:
+            logger.info(f"WEB_SECRET_KEY loaded (length: {len(web_secret)})")
+        else:
+            logger.error("WEB_SECRET_KEY is empty! Check .env file.")
         
         # Run Flask app (disable reloader in threaded mode)
         app.run(debug=False, host='0.0.0.0', port=5000, use_reloader=False)
         
+    except SystemExit as e:
+        # sys.exit() was called (e.g., WEB_SECRET_KEY missing)
+        logger.error(f"Web panel failed to start. Check WEB_SECRET_KEY in .env file. Exit code: {e.code}")
+        return  # Return gracefully instead of crashing
     except KeyboardInterrupt:
         logger.info("Web panel stopped by user")
     except Exception as e:
@@ -218,13 +240,17 @@ def main():
     
     # Keep main thread alive
     try:
+        web_thread_warned = False
+        bot_thread_warned = False
         while not shutdown_event.is_set():
             time.sleep(1)
             # Check if threads are alive
-            if bot_thread and not bot_thread.is_alive():
+            if bot_thread and not bot_thread.is_alive() and not bot_thread_warned:
                 logger.warning("Bot thread stopped!")
-            if web_thread and not web_thread.is_alive():
-                logger.warning("Web thread stopped!")
+                bot_thread_warned = True
+            if web_thread and not web_thread.is_alive() and not web_thread_warned:
+                logger.warning("Web thread stopped! (If you want to use web panel, check WEB_SECRET_KEY in .env)")
+                web_thread_warned = True
     except KeyboardInterrupt:
         signal_handler(None, None)
 

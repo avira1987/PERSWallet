@@ -177,10 +177,12 @@
         if (!currentWithdrawalId) return;
         
         try {
+            const csrfToken = getCSRFToken();
             const response = await fetch(`/api/withdrawals/${currentWithdrawalId}/confirm`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
                 }
             });
             

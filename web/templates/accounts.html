@@ -231,8 +231,12 @@
         if (!confirm(`آیا مطمئن هستید که می‌خواهید این حساب را ${action} کنید؟`)) return;
         
         try {
+            const csrfToken = getCSRFToken();
             const response = await fetch(`/api/accounts/${accountNumber}/toggle`, {
-                method: 'POST'
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                }
             });
             const data = await response.json();
             if (data.success) {
@@ -290,9 +294,13 @@
         }
         
         try {
+            const csrfToken = getCSRFToken();
             const response = await fetch(`/api/accounts/${accountNumber}/balance`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
                 body: JSON.stringify(data)
             });
             const result = await response.json();
@@ -336,9 +344,13 @@
         }
         
         try {
+            const csrfToken = getCSRFToken();
             const response = await fetch(`/api/accounts/${accountNumber}/reset-password`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
                 body: JSON.stringify({password: newPassword})
             });
             const result = await response.json();

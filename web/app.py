@@ -18,7 +18,7 @@ from database.models import User, Account, Transaction, Lock, WithdrawalRequest
 import config
 from web.utils import format_number, format_date, calculate_stats
 from web.auth import login_manager, WebUser
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, case
 from sqlalchemy.orm import joinedload
 
 # Get the directory of this file
@@ -149,50 +149,77 @@ def users():
 @admin_required
 @limiter.limit("60 per minute")
 def api_users():
-    """API endpoint for users list - optimized with joins"""
+    """API endpoint for users list - optimized with SQL aggregation"""
     db_session = db_manager.get_session()
     try:
-        # Get all users with eager loading of accounts and locks
-        users_list = db_session.query(User).options(
-            joinedload(User.accounts),
-            joinedload(User.lock)
-        ).order_by(User.created_at.desc()).all()
+        # Get pagination parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 100, type=int)
+        per_page = min(per_page, 500)  # Limit max per_page to prevent abuse
         
-        # Pre-load all locks in one query
-        user_ids = [user.user_id for user in users_list]
-        locks = db_session.query(Lock).filter(Lock.user_id.in_(user_ids)).all()
-        locks_dict = {lock.user_id: lock for lock in locks}
+        # Use SQL aggregation to calculate account count and balance efficiently
+        # This avoids loading all accounts into memory
+        
+        # Subquery for account statistics per user
+        account_stats = db_session.query(
+            Account.user_id,
+            func.count(Account.account_number).label('account_count'),
+            func.max(
+                case(
+                    (Account.is_active == True, Account.balance),
+                    else_=None
+                )
+            ).label('active_balance')
+        ).group_by(Account.user_id).subquery()
+        
+        # Main query with left join for locks and account stats
+        query = db_session.query(
+            User,
+            Lock,
+            account_stats.c.account_count,
+            account_stats.c.active_balance
+        ).outerjoin(
+            Lock, User.user_id == Lock.user_id
+        ).outerjoin(
+            account_stats, User.user_id == account_stats.c.user_id
+        ).order_by(User.created_at.desc())
+        
+        # Get total count for pagination
+        total_count = query.count()
+        
+        # Apply pagination
+        users_data = query.offset((page - 1) * per_page).limit(per_page).all()
         
         now = datetime.utcnow()
         result = []
-        for user in users_list:
-            # Use eager-loaded accounts to calculate stats (no extra queries)
-            accounts = user.accounts if user.accounts else []
-            account_count = len(accounts)
-            
-            # Find active account balance
-            balance = 0.0
-            for acc in accounts:
-                if acc.is_active:
-                    balance = float(acc.balance)
-                    break  # Use first active account
-            
-            # Get lock info from eager-loaded or dict
-            lock_info = user.lock if hasattr(user, 'lock') and user.lock else locks_dict.get(user.user_id)
+        for user, lock_info, account_count, active_balance in users_data:
+            # Check if user is locked
             is_locked = lock_info is not None and now < lock_info.locked_until if lock_info else False
             
             result.append({
                 'user_id': user.user_id,
                 'username': user.username if user.username else None,
                 'created_at': user.created_at.isoformat() if user.created_at else None,
-                'account_count': account_count,
-                'balance': balance,
+                'account_count': account_count if account_count else 0,
+                'balance': float(active_balance) if active_balance is not None else 0.0,
                 'is_locked': is_locked,
                 'lock_reason': lock_info.reason if lock_info else None,
                 'lock_until': lock_info.locked_until.isoformat() if lock_info and lock_info.locked_until else None,
                 'is_admin': user.is_admin if user.is_admin else False
             })
-        return jsonify({'users': result})
+        
+        return jsonify({
+            'users': result,
+            'pagination': {
+                'page': page,
+                'per_page': per_page,
+                'total': total_count,
+                'pages': (total_count + per_page - 1) // per_page if total_count > 0 else 0
+            }
+        })
+    except Exception as e:
+        logger.error(f"Error in api_users: {e}", exc_info=True)
+        return jsonify({'error': 'خطا در بارگذاری کاربران', 'details': str(e)}), 500
     finally:
         db_session.close()
 

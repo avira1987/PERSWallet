@@ -36,3 +36,24 @@ function showToast(message, type = 'info') {
 function confirmAction(message) {
     return confirm(message);
 }
+
+// Get CSRF token from meta tag
+function getCSRFToken() {
+    const metaTag = document.querySelector('meta[name="csrf-token"]');
+    return metaTag ? metaTag.getAttribute('content') : '';
+}
+
+// Helper function for fetch requests with CSRF token
+async function fetchWithCSRF(url, options = {}) {
+    const token = getCSRFToken();
+    const headers = {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': token,
+        ...options.headers
+    };
+    
+    return fetch(url, {
+        ...options,
+        headers: headers
+    });
+}

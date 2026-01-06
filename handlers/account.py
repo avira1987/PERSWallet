@@ -27,10 +27,25 @@ class AccountHandler:
                 await update.callback_query.edit_message_text(lock_message)
             return
         
+        # Check if there's a pending payment link in state
+        encrypted_state = self.db.get_user_state(user_id)
+        pending_payment_link = False
+        payment_link_amount = None
+        payment_link_destination = None
+        payment_link_token = None
+        
+        if encrypted_state:
+            state = decrypt_state(encrypted_state)
+            if state.get('pending_payment_link'):
+                pending_payment_link = True
+                payment_link_amount = state.get('payment_link_amount')
+                payment_link_destination = state.get('payment_link_destination')
+                payment_link_token = state.get('payment_link_token')
+        
         # Generate account number
         account_number = generate_account_number()
         
-        # Save state
+        # Save state (preserve payment link info if exists)
         state = {
             'action': 'create_account',
             'step': 'show_account_number',
@@ -38,6 +53,14 @@ class AccountHandler:
             'password_attempts': 0,
             'confirm_attempts': 0
         }
+        
+        # Preserve payment link info if exists
+        if pending_payment_link:
+            state['pending_payment_link'] = True
+            state['payment_link_amount'] = payment_link_amount
+            state['payment_link_destination'] = payment_link_destination
+            state['payment_link_token'] = payment_link_token
+        
         encrypted_state = encrypt_state(state)
         self.db.update_user_state(user_id, encrypted_state)
         
@@ -227,8 +250,29 @@ class AccountHandler:
         account_number = state['account_number']
         self.db.create_account(user_id, account_number, password)
         
+        # Check if there's a pending payment link before clearing state
+        pending_payment_link = state.get('pending_payment_link', False)
+        payment_link_amount = state.get('payment_link_amount')
+        payment_link_destination = state.get('payment_link_destination')
+        payment_link_token = state.get('payment_link_token')
+        
         # Clear state
         self.db.update_user_state(user_id, "")
+        
+        # If there's a pending payment link, process it
+        if pending_payment_link and payment_link_amount:
+            from handlers.start import StartHandler
+            start_handler = StartHandler(self.db, self.lock_manager)
+            
+            # Process payment link using the same method
+            await start_handler.handle_payment_link_processing(
+                update, 
+                context, 
+                payment_link_destination, 
+                payment_link_amount, 
+                payment_link_token
+            )
+            return
         
         # Show success message and main menu
         success_text = "✅ اکانت شما با موفقیت ایجاد شد!\n\n"

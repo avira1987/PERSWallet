@@ -73,12 +73,23 @@ class StartHandler:
         account = self.db.get_active_account(user_id)
         if not account:
             # User doesn't have account
+            # Store payment link info in state for later use after account creation
+            from utils.encryption import encrypt_state
+            state = {
+                'pending_payment_link': True,
+                'payment_link_amount': amount,
+                'payment_link_destination': destination_account,
+                'payment_link_token': token
+            }
+            encrypted_state = encrypt_state(state)
+            self.db.update_user_state(user_id, encrypted_state)
+            
             from utils.message_manager import send_and_save_message
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
             
             error_text = "⚠️ برای استفاده از این لینک پرداخت\n\n"
             error_text += "شما باید ابتدا یک اکانت در ربات بسازید.\n\n"
-            error_text += "💡 پس از ساخت اکانت، می‌توانید از لینک پرداخت استفاده کنید."
+            error_text += "💡 پس از ساخت اکانت، پردازش لینک پرداخت به صورت خودکار ادامه خواهد یافت."
             keyboard = [[InlineKeyboardButton("ساخت اکانت", callback_data="create_account")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await send_and_save_message(context, update.effective_chat.id, error_text, self.db, user_id, reply_markup=reply_markup)

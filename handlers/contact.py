@@ -119,15 +119,13 @@ class ContactHandler:
         self.db.update_user_state(user_id, encrypted_state)
         
         message_text = "✍️ ارسال پیام به پشتیبانی\n\n"
-        message_text += "لطفا متن پیام خود را وارد کنید:\n\n"
-        message_text += "💡 می‌توانید سوالات، پیشنهادات یا مشکلات خود را مطرح کنید.\n"
-        message_text += "⏰ تیم پشتیبانی در اسرع وقت به شما پاسخ خواهد داد.\n\n"
-        message_text += "📞 پشتیبانی: @PERS_coin_bot_support"
+        message_text += "برای ارتباط با پشتیبانی به ایدی زیر پیام دهید:\n\n"
+        message_text += f"📞 پشتیبانی: [@PERS_coin_bot_support](tg://user?id={config.ADMIN_USER_ID})"
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await send_and_save_message(context, update.effective_chat.id, message_text, self.db, user_id, reply_markup=reply_markup)
+        await send_and_save_message(context, update.effective_chat.id, message_text, self.db, user_id, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def handle_message_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle message input and send to admin"""
@@ -174,7 +172,7 @@ class ContactHandler:
         success_text += "📨 پیام شما به تیم پشتیبانی ارسال شد.\n\n"
         success_text += "⏰ در اسرع وقت به شما پاسخ داده خواهد شد.\n\n"
         success_text += "💡 می‌توانید از طریق همین بخش پیام‌های بعدی را نیز ارسال کنید.\n\n"
-        success_text += "📞 پشتیبانی: @PERS_coin_bot_support"
+        success_text += f"📞 پشتیبانی: [@PERS_coin_bot_support](tg://user?id={config.ADMIN_USER_ID})"
         
         keyboard = [[InlineKeyboardButton("منوی اصلی", callback_data="main_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -185,7 +183,8 @@ class ContactHandler:
             success_text,
             self.db,
             user_id,
-            reply_markup=reply_markup
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
         )
         
         # Clear state

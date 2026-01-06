@@ -50,7 +50,4 @@ Remove-NetFirewallRule -DisplayName "BalanceBot-WebPanel-Port-5000"
 - **شبکه محلی**: http://[IP-محلی]:5000
 - **اینترنت**: http://[IP-عمومی]:5000
 
-برای دریافت IP عمومی:
-```bash
-python get_public_ip.py
-```
+برای دریافت IP عمومی می‌توانید از سرویس‌های آنلاین مانند https://whatismyipaddress.com استفاده کنید.

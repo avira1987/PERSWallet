@@ -149,7 +149,7 @@ def users():
 @admin_required
 @limiter.limit("60 per minute")
 def api_users():
-    """API endpoint for users list - optimized with SQL aggregation"""
+    """API endpoint for users list - optimized for performance"""
     db_session = db_manager.get_session()
     try:
         # Get pagination parameters
@@ -157,51 +157,40 @@ def api_users():
         per_page = request.args.get('per_page', 100, type=int)
         per_page = min(per_page, 500)  # Limit max per_page to prevent abuse
         
-        # Use SQL aggregation to calculate account count and balance efficiently
-        # This avoids loading all accounts into memory
+        # Optimized: Get total count separately (much faster - uses index)
+        total_count = db_session.query(func.count(User.user_id)).scalar()
         
-        # Subquery for account statistics per user
-        account_stats = db_session.query(
-            Account.user_id,
-            func.count(Account.account_number).label('account_count'),
-            func.max(
-                case(
-                    (Account.is_active == True, Account.balance),
-                    else_=None
-                )
-            ).label('active_balance')
-        ).group_by(Account.user_id).subquery()
+        # Optimized: Load users with relationships eagerly to avoid N+1 queries
+        users = db_session.query(User).options(
+            joinedload(User.lock),
+            joinedload(User.accounts)
+        ).order_by(User.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
         
-        # Main query with left join for locks and account stats
-        query = db_session.query(
-            User,
-            Lock,
-            account_stats.c.account_count,
-            account_stats.c.active_balance
-        ).outerjoin(
-            Lock, User.user_id == Lock.user_id
-        ).outerjoin(
-            account_stats, User.user_id == account_stats.c.user_id
-        ).order_by(User.created_at.desc())
-        
-        # Get total count for pagination
-        total_count = query.count()
-        
-        # Apply pagination
-        users_data = query.offset((page - 1) * per_page).limit(per_page).all()
-        
+        # Calculate account stats from loaded relationships (no additional queries needed)
         now = datetime.utcnow()
         result = []
-        for user, lock_info, account_count, active_balance in users_data:
+        for user in users:
+            # Get account stats from loaded accounts relationship
+            accounts = user.accounts if hasattr(user, 'accounts') else []
+            account_count = len(accounts)
+            
+            # Find active account balance
+            active_balance = 0.0
+            for account in accounts:
+                if account.is_active:
+                    active_balance = float(account.balance)
+                    break  # Only need the first active account balance
+            
             # Check if user is locked
+            lock_info = user.lock if hasattr(user, 'lock') else None
             is_locked = lock_info is not None and now < lock_info.locked_until if lock_info else False
             
             result.append({
                 'user_id': user.user_id,
                 'username': user.username if user.username else None,
                 'created_at': user.created_at.isoformat() if user.created_at else None,
-                'account_count': account_count if account_count else 0,
-                'balance': float(active_balance) if active_balance is not None else 0.0,
+                'account_count': account_count,
+                'balance': active_balance,
                 'is_locked': is_locked,
                 'lock_reason': lock_info.reason if lock_info else None,
                 'lock_until': lock_info.locked_until.isoformat() if lock_info and lock_info.locked_until else None,

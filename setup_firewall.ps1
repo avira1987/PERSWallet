@@ -93,7 +93,7 @@ try {
     Write-Host "  - Network access: http://[Local-IP]:$port"
     Write-Host "  - Internet access: http://[Public-IP]:$port"
     Write-Host ""
-    Write-Host "To get your public IP, run: python get_public_ip.py" -ForegroundColor Yellow
+    Write-Host "To get your public IP, visit: https://whatismyipaddress.com" -ForegroundColor Yellow
     Write-Host ""
     
 } catch {

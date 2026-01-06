@@ -74,6 +74,7 @@ def admin_required(f):
 
 
 @app.route('/login', methods=['GET', 'POST'])
+@csrf.exempt  # CSRF handled via form hidden field
 def login():
     """Login page - simple authentication using admin user_id"""
     if request.method == 'POST':
@@ -141,7 +142,7 @@ def api_stats():
 @admin_required
 def users():
     """Users management page"""
-    return render_template('users.html')
+    return render_template('users.html', csrf_token=generate_csrf)
 
 
 @app.route('/api/users')
@@ -217,6 +218,7 @@ def api_users():
 @login_required
 @admin_required
 @limiter.limit("20 per minute")
+@csrf.exempt  # CSRF handled via header in JavaScript
 def api_lock_user(user_id):
     """Lock a user"""
     reason = request.json.get('reason', 'قفل دستی توسط ادمین')
@@ -228,6 +230,7 @@ def api_lock_user(user_id):
 @login_required
 @admin_required
 @limiter.limit("20 per minute")
+@csrf.exempt  # CSRF handled via header in JavaScript
 def api_unlock_user(user_id):
     """Unlock a user"""
     db_manager.unlock_user(user_id)
@@ -238,6 +241,7 @@ def api_unlock_user(user_id):
 @login_required
 @admin_required
 @limiter.limit("10 per minute")
+@csrf.exempt  # CSRF handled via header in JavaScript
 def api_delete_user(user_id):
     """Delete a user"""
     try:
@@ -254,6 +258,7 @@ def api_delete_user(user_id):
 @login_required
 @admin_required
 @limiter.limit("5 per minute")
+@csrf.exempt  # CSRF handled via header in JavaScript
 def api_set_admin_status(user_id):
     """Set admin status for a user"""
     try:
@@ -392,6 +397,7 @@ def api_accounts():
 @login_required
 @admin_required
 @limiter.limit("30 per minute")
+@csrf.exempt  # CSRF handled via header in JavaScript
 def api_toggle_account(account_number):
     """Activate/Deactivate an account"""
     session = db_manager.get_session()
@@ -416,6 +422,7 @@ def api_toggle_account(account_number):
 @login_required
 @admin_required
 @limiter.limit("30 per minute")
+@csrf.exempt  # CSRF handled via header in JavaScript
 def api_update_account_balance(account_number):
     """Update account balance (increase/decrease)"""
     try:
@@ -441,6 +448,7 @@ def api_update_account_balance(account_number):
 @login_required
 @admin_required
 @limiter.limit("10 per minute")
+@csrf.exempt  # CSRF handled via header in JavaScript
 def api_reset_account_password(account_number):
     """Reset account password"""
     try:
@@ -522,6 +530,7 @@ def api_withdrawals():
 @login_required
 @admin_required
 @limiter.limit("20 per minute")
+@csrf.exempt  # CSRF handled via header in JavaScript
 def api_confirm_withdrawal(request_id):
     """Confirm a withdrawal request and send confirmation message to user"""
     try:

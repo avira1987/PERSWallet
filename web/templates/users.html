@@ -458,8 +458,12 @@
         if (!confirm('آیا واقعاً مطمئن هستید؟ این عمل غیرقابل بازگشت است!')) return;
         
         try {
+            const csrfToken = getCSRFToken();
             const response = await fetch(`/api/users/${userId}/delete`, {
-                method: 'DELETE'
+                method: 'DELETE',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                }
             });
             const data = await response.json();
             if (data.success) {

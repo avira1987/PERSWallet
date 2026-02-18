@@ -1,0 +1,13 @@
+# SSH Config for Freelancer 1 - Project 1
+# این فایل را در ~/.ssh/config روی کامپیوتر خودتان قرار دهید
+
+Host project1
+    HostName 62.60.128.97
+    User freelancer1
+    IdentityFile ~/.ssh/id_freelancer1
+    StrictHostKeyChecking no
+    Port 22
+
+# نحوه استفاده:
+# ssh project1  # مستقیم به سرور متصل می‌شوید
+# بعد از اتصال: cd /var/www/project1

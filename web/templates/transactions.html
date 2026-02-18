@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}مدیریت تراکنش‌ها - پنل مدیریت بات{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4"><i class="bi bi-arrow-left-right"></i> مدیریت تراکنش‌ها</h2>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <input type="text" class="form-control" id="search-account" placeholder="جستجوی شماره حساب">
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" id="filter-type">
+                    <option value="">همه انواع</option>
+                    <option value="buy">خرید</option>
+                    <option value="sell">فروش</option>
+                    <option value="send">ارسال</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" id="filter-status">
+                    <option value="">همه وضعیت‌ها</option>
+                    <option value="pending">در انتظار</option>
+                    <option value="success">موفق</option>
+                    <option value="failed">ناموفق</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-primary w-100" onclick="loadTransactions()">
+                    <i class="bi bi-arrow-clockwise"></i> بروزرسانی
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Transactions Table -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">لیست تراکنش‌ها</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover" id="transactions-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>از حساب</th>
+                        <th>به حساب</th>
+                        <th>مبلغ</th>
+                        <th>کارمزد</th>
+                        <th>نوع</th>
+                        <th>وضعیت</th>
+                        <th>تاریخ</th>
+                    </tr>
+                </thead>
+                <tbody id="transactions-tbody">
+                    <tr>
+                        <td colspan="8" class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">در حال بارگذاری...</span>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let allTransactions = [];
+    
+    async function loadTransactions() {
+        try {
+            const accountFilter = document.getElementById('search-account').value;
+            const typeFilter = document.getElementById('filter-type').value;
+            const statusFilter = document.getElementById('filter-status').value;
+            
+            let url = '/api/transactions?limit=500';
+            if (accountFilter) url += `&account=${accountFilter}`;
+            if (typeFilter) url += `&type=${typeFilter}`;
+            if (statusFilter) url += `&status=${statusFilter}`;
+            
+            const response = await fetch(url);
+            const data = await response.json();
+            allTransactions = data.transactions;
+            renderTransactions(allTransactions);
+        } catch (error) {
+            console.error('Error loading transactions:', error);
+            alert('خطا در بارگذاری تراکنش‌ها');
+        }
+    }
+    
+    function renderTransactions(transactions) {
+        const tbody = document.getElementById('transactions-tbody');
+        
+        if (transactions.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center">تراکنشی یافت نشد</td></tr>';
+            return;
+        }
+        
+        const typeLabels = {
+            'buy': 'خرید',
+            'sell': 'فروش',
+            'send': 'ارسال'
+        };
+        
+        const statusBadges = {
+            'pending': '<span class="badge bg-warning">در انتظار</span>',
+            'success': '<span class="badge bg-success">موفق</span>',
+            'failed': '<span class="badge bg-danger">ناموفق</span>'
+        };
+        
+        tbody.innerHTML = transactions.map(trans => `
+            <tr>
+                <td>${trans.id}</td>
+                <td><code>${trans.from_account || '-'}</code></td>
+                <td><code>${trans.to_account || '-'}</code></td>
+                <td>${parseFloat(trans.amount).toLocaleString('fa-IR')} PERS</td>
+                <td>${parseFloat(trans.fee).toLocaleString('fa-IR')} PERS</td>
+                <td>${typeLabels[trans.transaction_type] || trans.transaction_type}</td>
+                <td>${statusBadges[trans.status] || trans.status}</td>
+                <td>${trans.created_at ? new Date(trans.created_at).toLocaleString('fa-IR') : '-'}</td>
+            </tr>
+        `).join('');
+    }
+    
+    // Event listeners
+    document.getElementById('search-account').addEventListener('input', () => loadTransactions());
+    document.getElementById('filter-type').addEventListener('change', () => loadTransactions());
+    document.getElementById('filter-status').addEventListener('change', () => loadTransactions());
+    
+    // Load transactions on page load
+    loadTransactions();
+    
+    // Auto-refresh every 30 seconds
+    setInterval(loadTransactions, 30000);
+</script>
+{% endblock %}
